@@ -7,7 +7,11 @@ N_SPLITS = 30
 
 
 def split_points(arr: np.ndarray) -> np.ndarray:
-    """Return the possible split points to consider."""
+    """Return the possible split points to consider.
+
+    For categoricals, we simply return the category list. For continuous
+    variables we compute the quantiles.
+    """
     uniques = np.unique(arr)
     if len(uniques) <= N_SPLITS:
         return uniques
@@ -25,6 +29,12 @@ def entropy(target: np.ndarray) -> float:
 
 
 class Node:
+    """Base class for the DecisionTree classifier element.
+
+    This class holds some data and decides whether to split its own data into
+    smaller nodes.
+    """
+
     def __init__(
         self,
         data: np.ndarray,
@@ -58,6 +68,7 @@ class Node:
             self.class_label = int(uniques[np.argmax(counts)])
 
     def split_node(self, data: np.ndarray) -> None:
+        """Split the node's data into smaller nodes."""
         n_samples, n_cols = data.shape
 
         best_score = np.inf
@@ -103,6 +114,7 @@ class Node:
         )
 
     def predict(self, X: np.ndarray) -> np.ndarray:
+        """Recursively predict until a leaf node is reached."""
         if self.is_leaf:
             return np.array([self.class_label] * X.shape[0])
         else:
@@ -133,6 +145,7 @@ class Node:
         return text
 
     def accept(self, graph: pgv.AGraph) -> None:
+        """Visitor to build the graphviz representation."""
         if not self.is_leaf:
             graph.add_node(self.uuid, label=str(self))
             graph.add_node(self.right_node.uuid, label=str(self.right_node))

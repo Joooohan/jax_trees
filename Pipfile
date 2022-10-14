@@ -7,6 +7,9 @@ name = "pypi"
 sklearn = "*"
 ipykernel = "*"
 prettytable = "*"
+black = "*"
+graphviz = "*"
+pygraphviz = "*"
 
 [dev-packages]
 

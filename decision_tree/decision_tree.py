@@ -125,8 +125,8 @@ class Node:
             graph.add_node(self.left_node.uuid, label=str(self.left_node))
             graph.add_node(self.right_node.uuid, label=str(self.right_node))
 
-            graph.add_edge(self.uuid, self.left_node.uuid)
-            graph.add_edge(self.uuid, self.right_node.uuid)
+            graph.add_edge(self.uuid, self.left_node.uuid, label="yes")
+            graph.add_edge(self.uuid, self.right_node.uuid, label="no")
             self.left_node.accept(graph)
             self.right_node.accept(graph)
 

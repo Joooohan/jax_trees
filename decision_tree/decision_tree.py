@@ -1,7 +1,7 @@
 import numpy as np
 import pygraphviz as pgv
 
-N_SPLITS = 20
+N_SPLITS = 30
 
 
 def split_points(arr: np.ndarray) -> np.ndarray:
@@ -40,7 +40,7 @@ class Node:
         else:
             self.is_leaf = True
             target = data[:, -1]
-            uniques, counts = np.unique(data, return_counts=True)
+            uniques, counts = np.unique(target, return_counts=True)
             self.class_label = uniques[np.argmax(counts)]
 
     def accept(self, graph: pgv.AGraph) -> None:

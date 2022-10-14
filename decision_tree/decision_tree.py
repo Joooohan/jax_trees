@@ -1,3 +1,5 @@
+import typing as t
+
 import numpy as np
 import pygraphviz as pgv
 
@@ -24,14 +26,25 @@ def entropy(target: np.ndarray) -> float:
 
 class Node:
     def __init__(
-        self, data: np.ndarray, max_depth: int, min_samples: int, uuid: str = ""
+        self,
+        data: np.ndarray,
+        max_depth: int,
+        min_samples: int,
+        criterion: t.Callable,
+        feature_names: t.Optional[t.List[str]] = None,
+        target_names: t.Optional[t.List[str]] = None,
+        uuid: str = "",
     ) -> None:
         self.max_depth = max_depth
         self.min_samples = min_samples
+        self.criterion = criterion
+        self.feature_names = feature_names
+        self.target_names = target_names
+        self.uuid = uuid
+
         n_samples, _ = data.shape
         self.n_samples = n_samples
-        self.score = entropy(data)
-        self.uuid = uuid
+        self.score = self.criterion(data)
 
         # Don't split further if no more depth
         # Stop here if not enough samples for further splits
@@ -42,7 +55,7 @@ class Node:
             self.is_leaf = True
             target = data[:, -1]
             uniques, counts = np.unique(target, return_counts=True)
-            self.class_label = uniques[np.argmax(counts)]
+            self.class_label = int(uniques[np.argmax(counts)])
 
     def split_node(self, data: np.ndarray) -> None:
         n_samples, n_cols = data.shape
@@ -57,11 +70,12 @@ class Node:
                 if n_left < self.min_samples or n_right < self.min_samples:
                     continue
 
-                left_score = entropy(left[:, -1])
-                right_score = entropy(right[:, -1])
+                left_score = self.criterion(left[:, -1])
+                right_score = self.criterion(right[:, -1])
                 score = (n_left * left_score + n_right * right_score) / n_samples
 
                 if score < best_score:
+                    best_score = score
                     self.best_col = col
                     self.best_point = point
                     self.best_score = score
@@ -70,19 +84,39 @@ class Node:
         left, right = data[mask, :], data[~mask, :]
 
         self.left_node = Node(
-            left, self.max_depth - 1, self.min_samples, self.uuid + "l"
+            left,
+            self.max_depth - 1,
+            self.min_samples,
+            self.criterion,
+            self.feature_names,
+            self.target_names,
+            self.uuid + "l",
         )
         self.right_node = Node(
-            right, self.max_depth - 1, self.min_samples, self.uuid + "r"
+            right,
+            self.max_depth - 1,
+            self.min_samples,
+            self.criterion,
+            self.feature_names,
+            self.target_names,
+            self.uuid + "r",
         )
 
     def __repr__(self) -> str:
         text = f"n={self.n_samples}\n"
         text += f"entropy {self.score:.2f}\n"
         if not self.is_leaf:
-            text += f"col {self.best_col} >= {self.best_point}"
+            if self.feature_names is not None:
+                col_name = self.feature_names[self.best_col]
+            else:
+                col_name = f"feature {self.best_col}"
+            text += f"{col_name} >= {self.best_point}"
         else:
-            text += f"label {self.class_label}"
+            if self.target_names is not None:
+                target_name = self.target_names[self.class_label]
+            else:
+                target_name = str(self.class_label)
+            text += f"label {target_name}"
         return text
 
     def accept(self, graph: pgv.AGraph) -> None:
@@ -98,9 +132,19 @@ class Node:
 
 
 class DecisionTreeClassifier:
-    def __init__(self, max_depth: int = 3, min_samples: int = 1) -> None:
+    def __init__(
+        self,
+        max_depth: int = 3,
+        min_samples: int = 1,
+        feature_names: t.Optional[t.List[str]] = None,
+        target_names: t.Optional[t.List[str]] = None,
+    ) -> None:
         self.max_depth = max_depth
         self.min_samples = min_samples
+        self.criterion = entropy
+        self.feature_names = feature_names
+        self.target_names = target_names
+
         if min_samples < 1:
             raise ValueError("`min_samples` must be greater or equal to 1.")
 
@@ -112,7 +156,15 @@ class DecisionTreeClassifier:
 
     def fit(self, X: np.ndarray, y: np.ndarray) -> None:
         data = np.concatenate([X, np.expand_dims(y, axis=1)], axis=1)
-        self.root = Node(data, self.max_depth, self.min_samples, "r")
+        self.root = Node(
+            data,
+            self.max_depth,
+            self.min_samples,
+            self.criterion,
+            self.feature_names,
+            self.target_names,
+            "r",
+        )
 
     def predict(self, X: np.ndarray) -> np.ndarray:
         ...

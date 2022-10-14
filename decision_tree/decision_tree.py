@@ -16,10 +16,10 @@ def split_points(arr: np.ndarray) -> np.ndarray:
 
 
 def entropy(target: np.ndarray) -> float:
-    """Shannon entropy."""
+    """Shannon entropy in bits."""
     _, classes_counts = np.unique(target, return_counts=True)
     probs = classes_counts / len(target)
-    return -np.sum(probs * np.log(probs))
+    return -np.sum(probs * np.log2(probs))
 
 
 class Node:
@@ -30,6 +30,7 @@ class Node:
         self.min_samples = min_samples
         n_samples, _ = data.shape
         self.n_samples = n_samples
+        self.score = entropy(data)
         self.uuid = uuid
 
         # Don't split further if no more depth
@@ -43,17 +44,6 @@ class Node:
             uniques, counts = np.unique(target, return_counts=True)
             self.class_label = uniques[np.argmax(counts)]
 
-    def accept(self, graph: pgv.AGraph) -> None:
-        if not self.is_leaf:
-            graph.add_node(self.uuid, label=str(self))
-            graph.add_node(self.left_node.uuid, label=str(self.left_node))
-            graph.add_node(self.right_node.uuid, label=str(self.right_node))
-
-            graph.add_edge(self.uuid, self.left_node.uuid)
-            graph.add_edge(self.uuid, self.right_node.uuid)
-            self.left_node.accept(graph)
-            self.right_node.accept(graph)
-
     def split_node(self, data: np.ndarray) -> None:
         n_samples, n_cols = data.shape
 
@@ -63,15 +53,18 @@ class Node:
             for point in points:
                 mask = data[:, col] >= point
                 left, right = data[mask, :], data[~mask, :]
+                n_left, n_right = left.shape[0], right.shape[0]
+                if n_left < self.min_samples or n_right < self.min_samples:
+                    continue
+
                 left_score = entropy(left[:, -1])
                 right_score = entropy(right[:, -1])
-                score = (
-                    left.shape[0] * left_score + right.shape[0] * right_score
-                ) / n_samples
+                score = (n_left * left_score + n_right * right_score) / n_samples
+
                 if score < best_score:
                     self.best_col = col
                     self.best_point = point
-                    self.gain = entropy(data[:, -1]) - score
+                    self.best_score = score
 
         mask = data[:, self.best_col] >= self.best_point
         left, right = data[mask, :], data[~mask, :]
@@ -85,18 +78,31 @@ class Node:
 
     def __repr__(self) -> str:
         text = f"n={self.n_samples}\n"
+        text += f"entropy {self.score:.2f}\n"
         if not self.is_leaf:
-            text += f"col {self.best_col} >= {self.best_point}\n"
-            text += f"gain {self.gain:.2f}"
+            text += f"col {self.best_col} >= {self.best_point}"
         else:
             text += f"label {self.class_label}"
         return text
 
+    def accept(self, graph: pgv.AGraph) -> None:
+        if not self.is_leaf:
+            graph.add_node(self.uuid, label=str(self))
+            graph.add_node(self.left_node.uuid, label=str(self.left_node))
+            graph.add_node(self.right_node.uuid, label=str(self.right_node))
+
+            graph.add_edge(self.uuid, self.left_node.uuid)
+            graph.add_edge(self.uuid, self.right_node.uuid)
+            self.left_node.accept(graph)
+            self.right_node.accept(graph)
+
 
 class DecisionTreeClassifier:
-    def __init__(self, max_depth: int = 3, min_samples: int = 0) -> None:
+    def __init__(self, max_depth: int = 3, min_samples: int = 1) -> None:
         self.max_depth = max_depth
         self.min_samples = min_samples
+        if min_samples < 1:
+            raise ValueError("`min_samples` must be greater or equal to 1.")
 
     def dot(self) -> str:
         G = pgv.AGraph(directed=True)

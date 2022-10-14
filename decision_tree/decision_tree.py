@@ -102,6 +102,19 @@ class Node:
             self.uuid + "r",
         )
 
+    def predict(self, X: np.ndarray) -> np.ndarray:
+        if self.is_leaf:
+            return np.array([self.class_label] * X.shape[0])
+        else:
+            mask = X[:, self.best_col] >= self.best_point
+            left, right = X[mask, :], X[~mask, :]
+            left_pred = self.left_node.predict(left)
+            right_pred = self.right_node.predict(right)
+            pred = np.zeros((X.shape[0]))
+            pred[mask] = left_pred
+            pred[~mask] = right_pred
+            return pred
+
     def __repr__(self) -> str:
         text = f"n={self.n_samples}\n"
         text += f"entropy {self.score:.2f}\n"
@@ -122,11 +135,11 @@ class Node:
     def accept(self, graph: pgv.AGraph) -> None:
         if not self.is_leaf:
             graph.add_node(self.uuid, label=str(self))
-            graph.add_node(self.left_node.uuid, label=str(self.left_node))
             graph.add_node(self.right_node.uuid, label=str(self.right_node))
+            graph.add_node(self.left_node.uuid, label=str(self.left_node))
 
-            graph.add_edge(self.uuid, self.left_node.uuid, label="yes")
             graph.add_edge(self.uuid, self.right_node.uuid, label="no")
+            graph.add_edge(self.uuid, self.left_node.uuid, label="yes")
             self.left_node.accept(graph)
             self.right_node.accept(graph)
 
@@ -167,4 +180,8 @@ class DecisionTreeClassifier:
         )
 
     def predict(self, X: np.ndarray) -> np.ndarray:
-        ...
+        return self.root.predict(X)
+
+    def score(self, X: np.ndarray, y: np.ndarray) -> float:
+        preds = self.predict(X)
+        return np.mean(preds == y)

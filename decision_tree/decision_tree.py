@@ -21,6 +21,12 @@ def most_frequent(arr: np.ndarray) -> t.Any:
     return int(uniques[np.argmax(counts)])
 
 
+def r2_score(y_true: np.ndarray, y_pred: np.ndarray) -> float:
+    u = np.square(y_true - y_pred).sum()
+    v = np.square(y_true - np.mean(y_true)).sum()
+    return 1 - u / v
+
+
 CRITERIONS = {
     "entropy": entropy,
     "variance": np.var,
@@ -59,6 +65,7 @@ class Node:
         feature_names: t.Optional[t.List[str]] = None,
         target_names: t.Optional[t.List[str]] = None,
         uuid: str = "",
+        node_type: str = "classifier",
     ) -> None:
         self.max_depth = max_depth
         self.min_samples = min_samples
@@ -67,6 +74,7 @@ class Node:
         self.feature_names = feature_names
         self.target_names = target_names
         self.uuid = uuid
+        self.node_type = node_type
 
         n_samples, _ = data.shape
         self.n_samples = n_samples
@@ -80,7 +88,10 @@ class Node:
         else:
             self.is_leaf = True
             target = data[:, -1]
-            self.class_label = most_frequent(target)
+            if self.node_type == "classifier":
+                self.leaf_value = most_frequent(target)
+            else:
+                self.leaf_value = np.mean(target)
 
     def split_node(self, data: np.ndarray) -> None:
         """Split the node's data into smaller nodes."""
@@ -118,6 +129,7 @@ class Node:
             self.feature_names,
             self.target_names,
             self.uuid + "l",
+            self.node_type,
         )
         self.right_node = Node(
             right,
@@ -128,12 +140,13 @@ class Node:
             self.feature_names,
             self.target_names,
             self.uuid + "r",
+            self.node_type,
         )
 
     def predict(self, X: np.ndarray) -> np.ndarray:
         """Recursively predict until a leaf node is reached."""
         if self.is_leaf:
-            return np.array([self.class_label] * X.shape[0])
+            return np.array([self.leaf_value] * X.shape[0])
         else:
             mask = X[:, self.best_col] >= self.best_point
             left, right = X[mask, :], X[~mask, :]
@@ -152,13 +165,13 @@ class Node:
                 col_name = self.feature_names[self.best_col]
             else:
                 col_name = f"feature {self.best_col}"
-            text += f"{col_name} >= {self.best_point}"
+            text += f"{col_name} >= {self.best_point:.2f}"
         else:
             if self.target_names is not None:
-                target_name = self.target_names[self.class_label]
+                target_name = self.target_names[self.leaf_value]
             else:
-                target_name = str(self.class_label)
-            text += f"label {target_name}"
+                target_name = f"{self.leaf_value:.2f}"
+            text += f"value {target_name}"
         return text
 
     def accept(self, graph: pgv.AGraph) -> None:
@@ -182,6 +195,7 @@ class DecisionTree:
         min_samples: int = 1,
         feature_names: t.Optional[t.List[str]] = None,
         target_names: t.Optional[t.List[str]] = None,
+        type: str = "classifier",
     ) -> None:
         self.max_depth = max_depth
         self.min_samples = min_samples
@@ -189,6 +203,7 @@ class DecisionTree:
         self.criterion_name = criterion
         self.feature_names = feature_names
         self.target_names = target_names
+        self.node_type = type
 
         if min_samples < 1:
             raise ValueError("`min_samples` must be greater or equal to 1.")
@@ -210,6 +225,7 @@ class DecisionTree:
             self.feature_names,
             self.target_names,
             "r",
+            self.node_type,
         )
 
     def predict(self, X: np.ndarray) -> np.ndarray:
@@ -233,6 +249,7 @@ class DecisionTreeClassifier(DecisionTree):
             min_samples=min_samples,
             feature_names=feature_names,
             target_names=target_names,
+            type="classifier",
         )
 
     def score(self, X: np.ndarray, y: np.ndarray) -> float:
@@ -254,8 +271,9 @@ class DecisionTreeRegressor(DecisionTree):
             min_samples=min_samples,
             feature_names=feature_names,
             target_names=target_names,
+            type="regressor",
         )
 
     def score(self, X: np.ndarray, y: np.ndarray) -> float:
         preds = self.predict(X)
-        return np.mean(np.square(y - preds))
+        return r2_score(y, preds)

@@ -5,6 +5,27 @@ import pygraphviz as pgv
 
 N_SPLITS = 30
 
+T = t.TypeVar("T")
+
+
+def entropy(target: np.ndarray) -> float:
+    """Shannon entropy in bits."""
+    _, classes_counts = np.unique(target, return_counts=True)
+    probs = classes_counts / len(target)
+    return -np.sum(probs * np.log2(probs))
+
+
+def most_frequent(arr: np.ndarray) -> t.Any:
+    """Return the most frequent element of an array."""
+    uniques, counts = np.unique(arr, return_counts=True)
+    return int(uniques[np.argmax(counts)])
+
+
+CRITERIONS = {
+    "entropy": entropy,
+    "variance": np.var,
+}
+
 
 def split_points(arr: np.ndarray) -> np.ndarray:
     """Return the possible split points to consider.
@@ -21,15 +42,8 @@ def split_points(arr: np.ndarray) -> np.ndarray:
         return np.unique(quantiles)
 
 
-def entropy(target: np.ndarray) -> float:
-    """Shannon entropy in bits."""
-    _, classes_counts = np.unique(target, return_counts=True)
-    probs = classes_counts / len(target)
-    return -np.sum(probs * np.log2(probs))
-
-
 class Node:
-    """Base class for the DecisionTree classifier element.
+    """Base class for the DecisionTree element.
 
     This class holds some data and decides whether to split its own data into
     smaller nodes.
@@ -41,6 +55,7 @@ class Node:
         max_depth: int,
         min_samples: int,
         criterion: t.Callable,
+        criterion_name: str,
         feature_names: t.Optional[t.List[str]] = None,
         target_names: t.Optional[t.List[str]] = None,
         uuid: str = "",
@@ -48,6 +63,7 @@ class Node:
         self.max_depth = max_depth
         self.min_samples = min_samples
         self.criterion = criterion
+        self.criterion_name = criterion_name
         self.feature_names = feature_names
         self.target_names = target_names
         self.uuid = uuid
@@ -64,8 +80,7 @@ class Node:
         else:
             self.is_leaf = True
             target = data[:, -1]
-            uniques, counts = np.unique(target, return_counts=True)
-            self.class_label = int(uniques[np.argmax(counts)])
+            self.class_label = most_frequent(target)
 
     def split_node(self, data: np.ndarray) -> None:
         """Split the node's data into smaller nodes."""
@@ -99,6 +114,7 @@ class Node:
             self.max_depth - 1,
             self.min_samples,
             self.criterion,
+            self.criterion_name,
             self.feature_names,
             self.target_names,
             self.uuid + "l",
@@ -108,6 +124,7 @@ class Node:
             self.max_depth - 1,
             self.min_samples,
             self.criterion,
+            self.criterion_name,
             self.feature_names,
             self.target_names,
             self.uuid + "r",
@@ -129,7 +146,7 @@ class Node:
 
     def __repr__(self) -> str:
         text = f"n={self.n_samples}\n"
-        text += f"entropy {self.score:.2f}\n"
+        text += f"{self.criterion_name} {self.score:.2f}\n"
         if not self.is_leaf:
             if self.feature_names is not None:
                 col_name = self.feature_names[self.best_col]
@@ -157,9 +174,10 @@ class Node:
             self.right_node.accept(graph)
 
 
-class DecisionTreeClassifier:
+class DecisionTree:
     def __init__(
         self,
+        criterion: str,
         max_depth: int = 3,
         min_samples: int = 1,
         feature_names: t.Optional[t.List[str]] = None,
@@ -167,7 +185,8 @@ class DecisionTreeClassifier:
     ) -> None:
         self.max_depth = max_depth
         self.min_samples = min_samples
-        self.criterion = entropy
+        self.criterion = CRITERIONS[criterion]
+        self.criterion_name = criterion
         self.feature_names = feature_names
         self.target_names = target_names
 
@@ -187,6 +206,7 @@ class DecisionTreeClassifier:
             self.max_depth,
             self.min_samples,
             self.criterion,
+            self.criterion_name,
             self.feature_names,
             self.target_names,
             "r",
@@ -196,5 +216,46 @@ class DecisionTreeClassifier:
         return self.root.predict(X)
 
     def score(self, X: np.ndarray, y: np.ndarray) -> float:
+        raise NotImplementedError
+
+
+class DecisionTreeClassifier(DecisionTree):
+    def __init__(
+        self,
+        max_depth: int = 3,
+        min_samples: int = 1,
+        feature_names: t.Optional[t.List[str]] = None,
+        target_names: t.Optional[t.List[str]] = None,
+    ) -> None:
+        super().__init__(
+            criterion="entropy",
+            max_depth=max_depth,
+            min_samples=min_samples,
+            feature_names=feature_names,
+            target_names=target_names,
+        )
+
+    def score(self, X: np.ndarray, y: np.ndarray) -> float:
         preds = self.predict(X)
         return np.mean(preds == y)
+
+
+class DecisionTreeRegressor(DecisionTree):
+    def __init__(
+        self,
+        max_depth: int = 3,
+        min_samples: int = 1,
+        feature_names: t.Optional[t.List[str]] = None,
+        target_names: t.Optional[t.List[str]] = None,
+    ) -> None:
+        super().__init__(
+            criterion="variance",
+            max_depth=max_depth,
+            min_samples=min_samples,
+            feature_names=feature_names,
+            target_names=target_names,
+        )
+
+    def score(self, X: np.ndarray, y: np.ndarray) -> float:
+        preds = self.predict(X)
+        return np.mean(np.square(y - preds))

@@ -1,3 +1,3 @@
-from .decision_tree import DecisionTreeClassifier
+from .decision_tree import DecisionTreeClassifier, DecisionTreeRegressor
 
-__all__ = ["DecisionTreeClassifier"]
+__all__ = ["DecisionTreeClassifier", "DecisionTreeRegressor"]

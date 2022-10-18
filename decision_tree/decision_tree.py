@@ -22,9 +22,15 @@ def most_frequent(arr: np.ndarray) -> t.Any:
 
 
 def r2_score(y_true: np.ndarray, y_pred: np.ndarray) -> float:
+    """Score for regressors."""
     u = np.square(y_true - y_pred).sum()
     v = np.square(y_true - np.mean(y_true)).sum()
     return 1 - u / v
+
+
+def accuracy(y_true: np.ndarray, y_pred: np.ndarray) -> float:
+    """Score for classifiers."""
+    return np.mean(y_true == y_pred)
 
 
 CRITERIONS = {
@@ -83,20 +89,23 @@ class Node:
         # Don't split further if no more depth
         # Stop here if not enough samples for further splits
         if max_depth > 0 and n_samples > self.min_samples:
-            self.is_leaf = False
             self.split_node(data)
         else:
-            self.is_leaf = True
-            target = data[:, -1]
-            if self.node_type == "classifier":
-                self.leaf_value = most_frequent(target)
-            else:
-                self.leaf_value = np.mean(target)
+            self.set_leaf(data)
+
+    def set_leaf(self, data: np.ndarray) -> None:
+        self.is_leaf = True
+        target = data[:, -1]
+        if self.node_type == "classifier":
+            self.leaf_value = most_frequent(target)
+        else:
+            self.leaf_value = np.mean(target)
 
     def split_node(self, data: np.ndarray) -> None:
         """Split the node's data into smaller nodes."""
         n_samples, n_cols = data.shape
 
+        self.best_col = None
         best_score = np.inf
         for col in range(n_cols - 1):
             points = split_points(data[:, col])
@@ -116,6 +125,12 @@ class Node:
                     self.best_col = col
                     self.best_point = point
                     self.best_score = score
+
+        if not self.best_col:
+            self.set_leaf(data)
+            return
+        else:
+            self.is_leaf = False
 
         mask = data[:, self.best_col] >= self.best_point
         left, right = data[mask, :], data[~mask, :]
@@ -254,7 +269,7 @@ class DecisionTreeClassifier(DecisionTree):
 
     def score(self, X: np.ndarray, y: np.ndarray) -> float:
         preds = self.predict(X)
-        return np.mean(preds == y)
+        return accuracy(y, preds)
 
 
 class DecisionTreeRegressor(DecisionTree):

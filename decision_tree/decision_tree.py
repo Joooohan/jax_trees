@@ -3,7 +3,7 @@ import typing as t
 import numpy as np
 import pygraphviz as pgv
 
-N_SPLITS = 30
+N_SPLITS = 15
 
 T = t.TypeVar("T")
 

@@ -4,14 +4,12 @@ verify_ssl = true
 name = "pypi"
 
 [packages]
-sklearn = "*"
-ipykernel = "*"
-prettytable = "*"
-black = "*"
-graphviz = "*"
-pygraphviz = "*"
+decision-tree = {editable = true, extras = ["graphviz", "jax"], path = "."}
 
 [dev-packages]
+ipykernel = "*"
+black = "*"
+pytest = "*"
 
 [requires]
 python_version = "3.8"

@@ -1,6 +1,6 @@
 import numpy as np
 
-from ..decision_tree import entropy
+from ..numpy.decision_tree import entropy
 
 
 def test_homogeneity():

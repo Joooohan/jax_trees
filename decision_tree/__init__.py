@@ -1,5 +1,5 @@
-from .bagging import RandomForestClassifier, RandomForestRegressor
-from .decision_tree import DecisionTreeClassifier, DecisionTreeRegressor
+from .numpy.bagging import RandomForestClassifier, RandomForestRegressor
+from .numpy.decision_tree import DecisionTreeClassifier, DecisionTreeRegressor
 
 __all__ = [
     "DecisionTreeClassifier",

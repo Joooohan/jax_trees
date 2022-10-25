@@ -8,7 +8,7 @@ decision-tree = {editable = true, extras = ["graphviz", "jax"], path = "."}
 
 [dev-packages]
 ipykernel = "*"
-black = "*"
+black = {extras = ["jupyter"], version = "*"}
 pytest = "*"
 
 [requires]

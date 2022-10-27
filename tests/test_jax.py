@@ -1,12 +1,16 @@
 import jax.numpy as jnp
 import numpy as np
 import pytest
-
-from decision_tree.jax.decision_tree import (compute_all_scores,
-                                             compute_column_scores,
-                                             compute_score, entropy,
-                                             row_to_nan, split_node,
-                                             split_points)
+from decision_tree.jax.decision_tree import (
+    compute_all_scores,
+    compute_column_scores,
+    compute_score,
+    entropy,
+    most_frequent,
+    row_to_nan,
+    split_node,
+    split_points,
+)
 
 N_SAMPLES = 100
 N_CLASSES = 3
@@ -123,3 +127,14 @@ def test_split_node(X, y, mask, max_splits):
     assert jnp.sum(left_mask) > 0
     assert jnp.sum(right_mask) > 0
     assert jnp.sum(left_mask) + jnp.sum(right_mask) == jnp.sum(mask)
+
+
+def test_most_frequent():
+    y = np.asarray([0, 1, 0, 1, 0])
+    mask = np.asarray([1, 1, 1, 1, 1]).astype("bool")
+    value = most_frequent(y, mask, 2)
+    assert value == 0
+
+    mask = np.asarray([0, 1, 0, 1, 1]).astype("bool")
+    value = most_frequent(y, mask, 2)
+    assert value == 1

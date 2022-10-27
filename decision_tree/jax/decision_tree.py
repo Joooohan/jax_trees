@@ -1,7 +1,8 @@
 from functools import partial
 
-import jax.numpy as jnp
 import numpy as np
+
+import jax.numpy as jnp
 from jax import jit, vmap
 
 
@@ -65,8 +66,6 @@ compute_all_scores = vmap(
     out_axes=1,
 )
 
-jitted_all_scores = jit(compute_all_scores, static_argnames=["n_classes"])
-
 
 @partial(jit, static_argnames=["max_splits", "n_classes"])
 def split_node(X, y, mask, max_splits: int, n_classes: int):
@@ -88,6 +87,12 @@ def split_node(X, y, mask, max_splits: int, n_classes: int):
     return left_mask, right_mask
 
 
+@partial(jit, static_argnames=["n_classes"])
+def most_frequent(y, mask, n_classes):
+    counts = jnp.bincount(jnp.where(mask, y, n_classes), length=n_classes)
+    return jnp.nanargmax(counts)
+
+
 class TreeNode:
     def __init__(
         self, X, y, mask, min_samples: int, depth: int, max_splits: int, n_classes: int
@@ -103,6 +108,7 @@ class TreeNode:
             )
         else:
             self.is_leaf = True
+            self.value = most_frequent(y, mask)
 
 
 class DecisionTreeClassifier:

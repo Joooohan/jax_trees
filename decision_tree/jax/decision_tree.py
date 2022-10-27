@@ -7,12 +7,13 @@ from jax import jit, vmap
 
 @partial(vmap, in_axes=(1, None), out_axes=1)
 def row_to_nan(X, mask):
+    """Convert a whole row of X to nan with a row mask."""
     return jnp.where(mask, X, np.nan)
 
 
 @partial(jit, static_argnames="max_splits")
 def split_points(X, mask, max_splits: int):
-    """Generate split points for the X data."""
+    """Generate split points for the data."""
     X = row_to_nan(X, mask)
 
     batched_unique = vmap(
@@ -28,16 +29,20 @@ def split_points(X, mask, max_splits: int):
 
 @partial(jit, static_argnames=["n_classes"])
 def entropy(y, mask, n_classes):
-    n_samples = y.shape[0]
+    """Shannon entropy in bits.
+
+    NB: In jnp.bincounts, values greater than length-1 are discarded so we set
+    values of `y` ignored by the mask to `n_classes` to discard them.
+    """
+    n_samples = jnp.sum(mask)
     counts = jnp.bincount(jnp.where(mask, y, n_classes), length=n_classes)
     probs = counts / n_samples
-    return -jnp.sum(probs * jnp.log2(probs))
+    log_probs = probs * jnp.log2(probs)
+    return -jnp.sum(jnp.where(probs <= 0.0, 0.0, log_probs))
 
 
-@partial(jit, static_argnames=["n_classes"])
-@partial(vmap, in_axes=(1, None, None, 1, None), out_axes=1)
-@partial(vmap, in_axes=(None, None, None, 0, None))
-def compute_scores(X_col, y, mask, split_value, n_classes):
+def compute_score(X_col, y, mask, split_value, n_classes):
+    """Compute the scores of data splits."""
     left_mask = jnp.where(X_col >= split_value, mask, False)
     right_mask = jnp.where(X_col < split_value, mask, False)
 
@@ -52,24 +57,52 @@ def compute_scores(X_col, y, mask, split_value, n_classes):
     return avg_score
 
 
+compute_column_scores = vmap(compute_score, in_axes=(None, None, None, 0, None))
+
+compute_all_scores = vmap(
+    compute_column_scores,
+    in_axes=(1, None, None, 1, None),
+    out_axes=1,
+)
+
+jitted_all_scores = jit(compute_all_scores, static_argnames=["n_classes"])
+
+
 @partial(jit, static_argnames=["max_splits", "n_classes"])
 def split_node(X, y, mask, max_splits: int, n_classes: int):
     """The algorithm does the following:
 
-    1. Generate split points (N_SPLITS, N_COLS) matrix
-    2. For each split point, compute the split score (N_SPLITS, N_COLS)
+    1. Generate split points candidates (N_SPLITS, N_COLS) matrix
+    2. For each split point, compute the split score -> (N_SPLITS, N_COLS)
     3. Select the point with the lowest score
-    4. Generate two new masks for left and right children
+    4. Generate two new masks for left and right children nodes
     """
     points = split_points(X, mask, max_splits)
-    scores = compute_scores(X, y, mask, points, n_classes)
+    scores = compute_all_scores(X, y, mask, points, n_classes)
 
     split_row, split_col = jnp.unravel_index(jnp.nanargmin(scores), scores.shape)
-    split_value = scores[split_row, split_col]
+    split_value = points[split_row, split_col]
 
     left_mask = jnp.where(X[:, split_col] >= split_value, mask, False)
     right_mask = jnp.where(X[:, split_col] < split_value, mask, False)
     return left_mask, right_mask
+
+
+class TreeNode:
+    def __init__(
+        self, X, y, mask, min_samples: int, depth: int, max_splits: int, n_classes: int
+    ):
+        if jnp.sum(mask) > min_samples and depth > 0:
+            left_mask, right_mask = split_node(X, y, mask, max_splits, n_classes)
+            self.is_leaf = False
+            self.left_node = TreeNode(
+                X, y, left_mask, min_samples, depth - 1, max_splits, n_classes
+            )
+            self.right_node = TreeNode(
+                X, y, right_mask, min_samples, depth - 1, max_splits, n_classes
+            )
+        else:
+            self.is_leaf = True
 
 
 class DecisionTreeClassifier:

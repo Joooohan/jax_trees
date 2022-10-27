@@ -123,7 +123,7 @@ def test_compute_all_scores():
 
 @pytest.mark.parametrize("max_splits", [5, 10, 20])
 def test_split_node(X, y, mask, max_splits):
-    left_mask, right_mask = split_node(X, y, mask, max_splits, N_CLASSES)
+    left_mask, right_mask, _, _ = split_node(X, y, mask, max_splits, N_CLASSES)
     assert jnp.sum(left_mask) > 0
     assert jnp.sum(right_mask) > 0
     assert jnp.sum(left_mask) + jnp.sum(right_mask) == jnp.sum(mask)

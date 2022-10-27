@@ -84,7 +84,7 @@ def split_node(X, y, mask, max_splits: int, n_classes: int):
 
     left_mask = jnp.where(X[:, split_col] >= split_value, mask, False)
     right_mask = jnp.where(X[:, split_col] < split_value, mask, False)
-    return left_mask, right_mask
+    return left_mask, right_mask, split_value, split_col
 
 
 @partial(jit, static_argnames=["n_classes"])
@@ -98,7 +98,9 @@ class TreeNode:
         self, X, y, mask, min_samples: int, depth: int, max_splits: int, n_classes: int
     ):
         if jnp.sum(mask) > min_samples and depth > 0:
-            left_mask, right_mask = split_node(X, y, mask, max_splits, n_classes)
+            left_mask, right_mask, split_value, split_col = split_node(
+                X, y, mask, max_splits, n_classes
+            )
             self.is_leaf = False
             self.left_node = TreeNode(
                 X, y, left_mask, min_samples, depth - 1, max_splits, n_classes
@@ -106,9 +108,23 @@ class TreeNode:
             self.right_node = TreeNode(
                 X, y, right_mask, min_samples, depth - 1, max_splits, n_classes
             )
+            self.split_value = split_value
+            self.split_col = split_col
         else:
             self.is_leaf = True
             self.value = most_frequent(y, mask, n_classes)
+
+    def predict(self, X: jnp.DeviceArray, mask: jnp.DeviceArray) -> jnp.DeviceArray:
+        if self.is_leaf:
+            return jnp.where(mask, self.value, np.nan)
+        else:
+            left_mask = jnp.where(X[:, self.split_col] >= self.split_value, mask, False)
+            right_mask = jnp.where(X[:, self.split_col] < self.split_value, mask, False)
+            right_pred = self.right_node.predict(X, right_mask)
+            left_pred = self.left_node.predict(X, left_mask)
+            return jnp.where(
+                left_mask, left_pred, jnp.where(right_mask, right_pred, np.nan)
+            )
 
 
 class DecisionTreeClassifier:
@@ -132,3 +148,10 @@ class DecisionTreeClassifier:
             max_splits=self.max_splits,
             n_classes=n_classes,
         )
+
+    def predict(self, X) -> jnp.DeviceArray:
+        X = X.astype("float")
+        mask = np.ones((X.shape[0],), dtype=bool)
+        if self.root is None:
+            raise ValueError("The model is not fitted.")
+        return self.root.predict(X, mask).astype("int")

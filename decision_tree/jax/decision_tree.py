@@ -155,3 +155,7 @@ class DecisionTreeClassifier:
         if self.root is None:
             raise ValueError("The model is not fitted.")
         return self.root.predict(X, mask).astype("int")
+
+    def score(self, X: jnp.DeviceArray, y: jnp.DeviceArray) -> float:
+        preds = self.predict(X)
+        return jnp.mean(preds == y)

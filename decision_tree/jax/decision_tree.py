@@ -108,12 +108,27 @@ class TreeNode:
             )
         else:
             self.is_leaf = True
-            self.value = most_frequent(y, mask)
+            self.value = most_frequent(y, mask, n_classes)
 
 
 class DecisionTreeClassifier:
-    def __init__(self):
-        ...
+    def __init__(self, min_samples: int = 2, max_depth: int = 4, max_splits: int = 20):
+        self.min_samples = min_samples
+        self.max_depth = max_depth
+        self.max_splits = max_splits
+        self.root = None
 
-    def fit(X, y) -> None:
-        ...
+    def fit(self, X, y) -> None:
+        X = X.astype("float")
+        y = y.astype("int")
+        mask = np.ones_like(y, dtype=bool)
+        n_classes = jnp.size(jnp.bincount(y))
+        self.root = TreeNode(
+            X,
+            y,
+            mask,
+            min_samples=self.min_samples,
+            depth=self.max_depth,
+            max_splits=self.max_splits,
+            n_classes=n_classes,
+        )

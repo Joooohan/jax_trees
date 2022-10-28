@@ -15,16 +15,9 @@ def row_to_nan(X, mask):
 def split_points(X, mask, max_splits: int):
     """Generate split points for the data."""
     X = row_to_nan(X, mask)
-
-    batched_unique = vmap(
-        partial(jnp.unique, size=max_splits, fill_value=np.nan), in_axes=1, out_axes=1
-    )
     delta = 1 / (max_splits + 1)
     quantiles = jnp.nanquantile(X, jnp.linspace(delta, 1 - delta, max_splits), axis=0)
-    uniques = batched_unique(X)
-    candidates = jnp.concatenate([uniques, quantiles], axis=0)
-    points = batched_unique(candidates)
-    return points
+    return quantiles
 
 
 @partial(jit, static_argnames=["n_classes"])
@@ -149,7 +142,7 @@ class TreeNode:
 
 
 class DecisionTreeClassifier:
-    def __init__(self, min_samples: int = 2, max_depth: int = 4, max_splits: int = 20):
+    def __init__(self, min_samples: int = 2, max_depth: int = 4, max_splits: int = 25):
         self.min_samples = min_samples
         self.max_depth = max_depth
         self.max_splits = max_splits
@@ -157,7 +150,7 @@ class DecisionTreeClassifier:
 
     def fit(self, X, y) -> None:
         X = X.astype("float")
-        y = y.astype("int")
+        y = y.astype("int16")
         mask = np.ones_like(y, dtype=bool)
         n_classes = jnp.size(jnp.bincount(y))
         self.root = TreeNode(
@@ -175,7 +168,7 @@ class DecisionTreeClassifier:
         mask = np.ones((X.shape[0],), dtype=bool)
         if self.root is None:
             raise ValueError("The model is not fitted.")
-        return self.root.predict(X, mask).astype("int")
+        return self.root.predict(X, mask).astype("int16")
 
     def score(self, X: jnp.DeviceArray, y: jnp.DeviceArray) -> float:
         preds = self.predict(X)

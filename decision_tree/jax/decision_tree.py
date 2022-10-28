@@ -1,8 +1,7 @@
 from functools import partial
 
-import numpy as np
-
 import jax.numpy as jnp
+import numpy as np
 from jax import jit, vmap
 
 
@@ -97,6 +96,11 @@ class TreeNode:
     def __init__(
         self, X, y, mask, min_samples: int, depth: int, max_splits: int, n_classes: int
     ):
+        self.n_samples = jnp.sum(mask)
+        self.score = entropy(y, mask, n_classes)
+        self.feature_names = None
+        self.target_names = None
+
         if jnp.sum(mask) > min_samples and depth > 0:
             left_mask, right_mask, split_value, split_col = split_node(
                 X, y, mask, max_splits, n_classes
@@ -125,6 +129,23 @@ class TreeNode:
             return jnp.where(
                 left_mask, left_pred, jnp.where(right_mask, right_pred, np.nan)
             )
+
+    def __repr__(self) -> str:
+        text = f"n={self.n_samples}\n"
+        text += f"entropy {self.score:.2f}\n"
+        if not self.is_leaf:
+            if self.feature_names is not None:
+                col_name = self.feature_names[self.split_col]
+            else:
+                col_name = f"feature {self.split_col}"
+            text += f"{col_name} >= {self.split_value:.2f}"
+        else:
+            if self.target_names is not None:
+                target_name = self.target_names[self.value]
+            else:
+                target_name = f"{self.value:.2f}"
+            text += f"value {target_name}"
+        return text
 
 
 class DecisionTreeClassifier:

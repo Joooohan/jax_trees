@@ -1,7 +1,6 @@
 import typing as t
 
 import numpy as np
-import pygraphviz as pgv
 
 N_SPLITS = 15
 
@@ -189,18 +188,6 @@ class Node:
             text += f"value {target_name}"
         return text
 
-    def accept(self, graph: pgv.AGraph) -> None:
-        """Visitor to build the graphviz representation."""
-        if not self.is_leaf:
-            graph.add_node(self.uuid, label=str(self))
-            graph.add_node(self.right_node.uuid, label=str(self.right_node))
-            graph.add_node(self.left_node.uuid, label=str(self.left_node))
-
-            graph.add_edge(self.uuid, self.right_node.uuid, label="no")
-            graph.add_edge(self.uuid, self.left_node.uuid, label="yes")
-            self.left_node.accept(graph)
-            self.right_node.accept(graph)
-
 
 class DecisionTree:
     def __init__(
@@ -222,12 +209,6 @@ class DecisionTree:
 
         if min_samples < 1:
             raise ValueError("`min_samples` must be greater or equal to 1.")
-
-    def dot(self) -> str:
-        G = pgv.AGraph(directed=True)
-        G.node_attr.update(shape="box")
-        self.root.accept(G)
-        return G.string()
 
     def fit(self, X: np.ndarray, y: np.ndarray) -> None:
         data = np.concatenate([X, np.expand_dims(y, axis=1)], axis=1)

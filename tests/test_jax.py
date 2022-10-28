@@ -1,16 +1,12 @@
 import jax.numpy as jnp
 import numpy as np
 import pytest
-from decision_tree.jax.decision_tree import (
-    compute_all_scores,
-    compute_column_scores,
-    compute_score,
-    entropy,
-    most_frequent,
-    row_to_nan,
-    split_node,
-    split_points,
-)
+
+from decision_tree.jax.decision_tree import (compute_all_scores,
+                                             compute_column_scores,
+                                             compute_score, entropy,
+                                             most_frequent, row_to_nan,
+                                             split_node, split_points)
 
 N_SAMPLES = 100
 N_CLASSES = 3

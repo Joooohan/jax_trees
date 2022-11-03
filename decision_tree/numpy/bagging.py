@@ -3,8 +3,13 @@ from multiprocessing import Pool
 
 import numpy as np
 
-from .decision_tree import (DecisionTreeClassifier, DecisionTreeRegressor,
-                            accuracy, most_frequent, r2_score)
+from .decision_tree import (
+    DecisionTreeClassifier,
+    DecisionTreeRegressor,
+    accuracy,
+    most_frequent,
+    r2_score,
+)
 
 
 def fit_decision_tree_classifier(data) -> DecisionTreeClassifier:

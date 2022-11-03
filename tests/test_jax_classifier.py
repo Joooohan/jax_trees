@@ -1,11 +1,14 @@
 import jax.numpy as jnp
 import numpy as np
 import pytest
-
-from decision_tree.jax.classifier import (compute_all_scores,
-                                          compute_column_scores, compute_score,
-                                          entropy, most_frequent, row_to_nan,
-                                          split_node, split_points)
+from decision_tree.jax.classifier import (
+    compute_all_scores,
+    compute_column_scores,
+    compute_score,
+    entropy,
+    most_frequent,
+    split_node,
+)
 
 N_SAMPLES = 100
 N_CLASSES = 3
@@ -36,19 +39,6 @@ def mask():
     mask = np.ones((N_SAMPLES,), dtype=bool)
     mask[0] = False
     return mask
-
-
-def test_row_to_nan(X, mask):
-    masked_X = row_to_nan(X, mask)
-    assert jnp.all(jnp.isnan(masked_X[0, :]))
-    assert jnp.all(masked_X[1:, :] == X[1:, :])
-
-
-@pytest.mark.parametrize("max_splits", [5, 10, 20])
-def test_split_points(X, mask, max_splits):
-    max_splits
-    points = split_points(X, mask, max_splits)
-    assert points.shape == (max_splits, X.shape[1])
 
 
 def test_entropy():

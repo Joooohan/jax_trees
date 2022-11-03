@@ -18,6 +18,13 @@ def average(y, mask):
     return jnp.nanmean(jnp.where(mask, y, np.nan))
 
 
+def r2_score(y_true, y_pred) -> float:
+    """Score for regressors."""
+    u = jnp.square(y_true - y_pred).sum()
+    v = jnp.sum(jnp.square(y_true - jnp.mean(y_true)))
+    return 1 - u / v
+
+
 def compute_score(X_col, y, mask, split_value):
     """Compute the scores of data splits."""
     left_mask = jnp.where(X_col >= split_value, mask, False)
@@ -125,8 +132,8 @@ class DecisionTreeRegressor:
         self.root = None
 
     def fit(self, X, y) -> None:
-        X = X.astype("float")
-        y = y.astype("float")
+        X = X.astype("float32")
+        y = y.astype("float32")
         mask = np.ones_like(y, dtype=bool)
         self.root = TreeNode(
             X,
@@ -138,12 +145,12 @@ class DecisionTreeRegressor:
         )
 
     def predict(self, X) -> jnp.DeviceArray:
-        X = X.astype("float")
+        X = X.astype("float32")
         mask = np.ones((X.shape[0],), dtype=bool)
         if self.root is None:
             raise ValueError("The model is not fitted.")
-        return self.root.predict(X, mask).astype("float")
+        return self.root.predict(X, mask).astype("float32")
 
     def score(self, X: jnp.DeviceArray, y: jnp.DeviceArray) -> float:
         preds = self.predict(X)
-        return jnp.mean(preds == y)
+        return r2_score(y, preds)

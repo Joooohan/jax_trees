@@ -137,7 +137,7 @@ class DecisionTreeClassifier:
         self.root = None
 
     def fit(self, X, y) -> None:
-        X = X.astype("float")
+        X = X.astype("float32")
         y = y.astype("int16")
         mask = np.ones_like(y, dtype=bool)
         n_classes = jnp.size(jnp.bincount(y))
@@ -152,7 +152,7 @@ class DecisionTreeClassifier:
         )
 
     def predict(self, X) -> jnp.DeviceArray:
-        X = X.astype("float")
+        X = X.astype("float32")
         mask = np.ones((X.shape[0],), dtype=bool)
         if self.root is None:
             raise ValueError("The model is not fitted.")

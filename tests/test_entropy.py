@@ -1,4 +1,4 @@
-from decision_tree.numpy.decision_tree import entropy
+from decision_tree.numpy.trees import entropy
 
 
 def test_homogeneity():

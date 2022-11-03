@@ -1,4 +1,5 @@
-# Decision tree
+# Decision Trees in JAX
 
-Simple implementation of a decision tree classifier done as a task to
-better understand these models.
+Simple implementations of Decision Trees, Random Forests and Gradient Boosted Trees with JAX.
+
+

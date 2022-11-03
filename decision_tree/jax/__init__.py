@@ -1,3 +1,4 @@
-from .decision_tree import DecisionTreeClassifier
+from .classifier import DecisionTreeClassifier
+from .regressor import DecisionTreeRegressor
 
 __all__ = ["DecisionTreeClassifier"]

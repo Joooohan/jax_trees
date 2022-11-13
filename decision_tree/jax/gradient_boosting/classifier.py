@@ -1,7 +1,5 @@
-from functools import partial
-
 import jax.numpy as jnp
-from jax import grad, nn
+from jax import grad, nn, vmap
 
 from ..regressor import DecisionTreeRegressor, r2_score
 
@@ -41,7 +39,7 @@ class GradientBoostedClassifier:
         self.base_value = log_probs
         y_oh = nn.one_hot(y, n_classes)
 
-        grad_loss = grad(binary_cross_entropy)
+        grad_loss = vmap(grad(binary_cross_entropy), in_axes=1, out_axes=1)
 
         current_preds = jnp.repeat(
             jnp.expand_dims(log_probs, axis=0),
@@ -52,15 +50,15 @@ class GradientBoostedClassifier:
 
         for _ in range(self.n_estimators):
             stage_estimators, stage_preds = [], []
+            residuals = -grad_loss(current_preds, y_oh)
             for col in range(n_classes):
                 # At each stage we need to fit `n_classes` estimators
-                residuals = -grad_loss(current_preds[:, col], y_oh[:, col])
                 weak_learner = DecisionTreeRegressor(
                     min_samples=self.min_samples,
                     max_depth=self.max_depth,
                     max_splits=self.max_splits,
                 )
-                weak_learner.fit(X, residuals)
+                weak_learner.fit(X, residuals[:, col])
                 stage_estimators.append(weak_learner)
                 stage_preds.append(weak_learner.predict(X))
 

@@ -1,4 +1,5 @@
 from .classifier import DecisionTreeClassifier
+from .gradient_boosting.classifier import GradientBoostedClassifier
 from .gradient_boosting.regressor import GradientBoostedRegressor
 from .random_forest.classifier import RandomForestClassifier
 from .random_forest.regressor import RandomForestRegressor
@@ -10,4 +11,5 @@ __all__ = [
     "RandomForestClassifier",
     "RandomForestRegressor",
     "GradientBoostedRegressor",
+    "GradientBoostedClassifier",
 ]

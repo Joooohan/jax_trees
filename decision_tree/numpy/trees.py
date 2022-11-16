@@ -117,7 +117,9 @@ class Node:
 
                 left_score = self.criterion(left[:, -1])
                 right_score = self.criterion(right[:, -1])
-                score = (n_left * left_score + n_right * right_score) / n_samples
+                score = (
+                    n_left * left_score + n_right * right_score
+                ) / n_samples
 
                 if score < best_score:
                     best_score = score

@@ -54,7 +54,9 @@ class GradientBoostedRegressor:
             raise ValueError("The model is not fitted.")
 
         X = X.astype("float32")
-        weak_preds = [weak_learner.predict(X) for weak_learner in self.estimators]
+        weak_preds = [
+            weak_learner.predict(X) for weak_learner in self.estimators
+        ]
         preds_sum = jnp.sum(jnp.stack(weak_preds, axis=0), axis=0)
         return self.base_value + self.learning_rate * preds_sum
 

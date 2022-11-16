@@ -73,7 +73,8 @@ class GradientBoostedClassifier:
         X = X.astype("float32")
         weak_preds = [
             jnp.stack(
-                [weak_learner.predict(X) for weak_learner in stage_estimators], axis=1
+                [weak_learner.predict(X) for weak_learner in stage_estimators],
+                axis=1,
             )
             for stage_estimators in self.estimators
         ]

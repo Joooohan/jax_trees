@@ -39,7 +39,7 @@ class RandomForestClassifier:
             idx = jax.random.randint(
                 subkey, shape=(n_samples,), minval=0, maxval=n_samples
             )
-            model.fit(X[idx], y[idx])
+            model.fit(X, y, jnp.bincount(idx, length=n_samples))
             self.estimators.append(model)
 
     def predict(self, X: jnp.ndarray) -> jnp.ndarray:

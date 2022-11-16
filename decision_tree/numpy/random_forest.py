@@ -66,7 +66,9 @@ class RandomForestClassifier:
         preds = np.stack(
             [estimator.predict(X) for estimator in self.estimators], axis=0
         )
-        return np.array([most_frequent(preds[:, i]) for i in range(preds.shape[1])])
+        return np.array(
+            [most_frequent(preds[:, i]) for i in range(preds.shape[1])]
+        )
 
     def score(self, X: np.ndarray, y: np.ndarray) -> float:
         preds = self.predict(X)

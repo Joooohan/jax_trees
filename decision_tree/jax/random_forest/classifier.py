@@ -48,7 +48,8 @@ class RandomForestClassifier:
 
         X = X.astype("float32")
         preds = jnp.stack(
-            [estimator.predict(X) for estimator in self.estimators], axis=0
+            [estimator.predict(X) for estimator in self.estimators],
+            axis=0,
         )
         batched_most_frequent = vmap(
             partial(jnp.bincount, length=self.n_classes), in_axes=(1,)

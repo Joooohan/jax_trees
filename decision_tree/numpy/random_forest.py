@@ -3,8 +3,13 @@ from multiprocessing import Pool
 
 import numpy as np
 
-from .trees import (DecisionTreeClassifier, DecisionTreeRegressor, accuracy,
-                    most_frequent, r2_score)
+from .trees import (
+    DecisionTreeClassifier,
+    DecisionTreeRegressor,
+    accuracy,
+    most_frequent,
+    r2_score,
+)
 
 
 def fit_decision_tree_classifier(data) -> DecisionTreeClassifier:
@@ -59,7 +64,8 @@ class RandomForestClassifier:
 
     def predict(self, X: np.ndarray) -> np.ndarray:
         preds = np.stack(
-            [estimator.predict(X) for estimator in self.estimators], axis=0
+            [estimator.predict(X) for estimator in self.estimators],
+            axis=0,
         )
         return np.array(
             [most_frequent(preds[:, i]) for i in range(preds.shape[1])]
@@ -98,7 +104,8 @@ class RandomForestRegressor:
 
     def predict(self, X: np.ndarray) -> np.ndarray:
         preds = np.stack(
-            [estimator.predict(X) for estimator in self.estimators], axis=0
+            [estimator.predict(X) for estimator in self.estimators],
+            axis=0,
         )
         return np.mean(preds, axis=0)
 

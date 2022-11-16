@@ -26,7 +26,10 @@ def r2_score(y_true: jnp.ndarray, y_pred: jnp.ndarray) -> float:
 
 
 def compute_score(
-    X_col: jnp.ndarray, y: jnp.ndarray, mask: jnp.ndarray, split_value: float
+    X_col: jnp.ndarray,
+    y: jnp.ndarray,
+    mask: jnp.ndarray,
+    split_value: float,
 ) -> float:
     """Compute the scores of data splits."""
     left_mask, right_mask = split_mask(split_value, X_col, mask)
@@ -94,7 +97,7 @@ class TreeNode:
         self.target_names = None
 
         if jnp.sum(mask) > min_samples and depth > 0:
-            left_mask, right_mask, split_value, split_col = split_node(
+            (left_mask, right_mask, split_value, split_col) = split_node(
                 X, y, mask, max_splits
             )
             self.is_leaf = False

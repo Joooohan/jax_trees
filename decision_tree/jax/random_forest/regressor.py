@@ -44,7 +44,8 @@ class RandomForestRegressor:
 
         X = X.astype("float32")
         preds = jnp.stack(
-            [estimator.predict(X) for estimator in self.estimators], axis=0
+            [estimator.predict(X) for estimator in self.estimators],
+            axis=0,
         )
         return jnp.mean(preds, axis=0)
 

@@ -104,7 +104,7 @@ class TreeNode:
         self.target_names = None
 
         if jnp.sum(mask) > min_samples and depth > 0:
-            left_mask, right_mask, split_value, split_col = split_node(
+            (left_mask, right_mask, split_value, split_col) = split_node(
                 X, y, mask, max_splits, n_classes
             )
             self.is_leaf = False

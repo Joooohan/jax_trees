@@ -2,7 +2,6 @@ from functools import partial
 from typing import Optional, Tuple
 
 import jax.numpy as jnp
-import numpy as np
 from jax import jit, vmap
 
 from .utils import split_mask, split_points
@@ -113,7 +112,7 @@ class TreeNode:
 
     def predict(self, X: jnp.ndarray, mask: jnp.ndarray) -> jnp.DeviceArray:
         if self.is_leaf:
-            return jnp.where(mask, self.value, np.nan)
+            return jnp.where(mask, self.value, jnp.nan)
         else:
             left_mask = jnp.where(
                 X[:, self.split_col] >= self.split_value, mask, False
@@ -124,7 +123,9 @@ class TreeNode:
             right_pred = self.right_node.predict(X, right_mask)
             left_pred = self.left_node.predict(X, left_mask)
             return jnp.where(
-                left_mask, left_pred, jnp.where(right_mask, right_pred, np.nan)
+                left_mask,
+                left_pred,
+                jnp.where(right_mask, right_pred, jnp.nan),
             )
 
     def __repr__(self) -> str:
@@ -163,7 +164,7 @@ class DecisionTreeRegressor:
         X = X.astype("float32")
         y = y.astype("float32")
         if mask is None:
-            mask = np.ones_like(y)
+            mask = jnp.ones_like(y)
         self.root = TreeNode(
             X,
             y,
@@ -175,7 +176,7 @@ class DecisionTreeRegressor:
 
     def predict(self, X: jnp.ndarray) -> jnp.ndarray:
         X = X.astype("float32")
-        mask = np.ones((X.shape[0],))
+        mask = jnp.ones((X.shape[0],))
         if self.root is None:
             raise ValueError("The model is not fitted.")
         return self.root.predict(X, mask).astype("float32")

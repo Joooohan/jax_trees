@@ -11,7 +11,7 @@ from .utils import split_mask, split_points
 def entropy(y: jnp.ndarray, mask: jnp.ndarray, n_classes: int) -> float:
     """Shannon entropy in bits.
 
-    If there are no samples: will return non
+    Returns NaN if no samples.
     """
     n_samples = jnp.sum(mask)
     counts = jnp.bincount(y, weights=mask, length=n_classes)

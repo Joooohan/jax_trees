@@ -1,7 +1,7 @@
 import jax.numpy as jnp
 import numpy as np
 
-from decision_tree.jax.regressor import variance
+from jax_trees.jax.regressor import variance
 
 
 def test_variance():

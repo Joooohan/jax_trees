@@ -2,7 +2,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from decision_tree.jax.utils import row_to_nan, split_points
+from jax_trees.jax.utils import row_to_nan, split_points
 
 N_SAMPLES = 100
 

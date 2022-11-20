@@ -4,12 +4,13 @@ verify_ssl = true
 name = "pypi"
 
 [packages]
-decision-tree = {editable = true, extras = ["graphviz", "jax"], path = "."}
+jax_trees = {editable = true, extras = ["graphviz", "jax"], path = "."}
 
 [dev-packages]
 ipykernel = "*"
 black = {extras = ["jupyter"], version = "*"}
 pytest = "*"
+pandas = "*"
 
 [requires]
 python_version = "3.8"

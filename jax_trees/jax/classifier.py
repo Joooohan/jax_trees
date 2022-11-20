@@ -1,8 +1,12 @@
+from __future__ import annotations
+
+import math
 from functools import partial
 from typing import Optional, Tuple
 
 import jax.numpy as jnp
 from jax import jit, vmap
+from jax.tree_util import register_pytree_node
 
 from .utils import split_mask, split_points
 
@@ -58,7 +62,7 @@ compute_all_scores = vmap(
 def split_node(
     X: jnp.ndarray,
     y: jnp.ndarray,
-    mask: jnp.ndarray,
+    current_node: TreeNode,
     max_splits: int,
     n_classes: int,
 ) -> Tuple[jnp.ndarray, jnp.ndarray, float, int]:
@@ -69,16 +73,18 @@ def split_node(
     3. Select the point with the lowest score
     4. Generate two new masks for left and right children nodes
     """
-    points = split_points(X, mask, max_splits)
-    scores = compute_all_scores(X, y, mask, points, n_classes)
+    points = split_points(X, current_node.mask, max_splits)
+    scores = compute_all_scores(X, y, current_node.mask, points, n_classes)
 
     split_row, split_col = jnp.unravel_index(
         jnp.nanargmin(scores), scores.shape
     )
     split_value = points[split_row, split_col]
-    left_mask, right_mask = split_mask(split_value, X[:, split_col], mask)
+    left_mask, right_mask = split_mask(
+        split_value, X[:, split_col], current_node.mask
+    )
 
-    return left_mask, right_mask, split_value, split_col
+    return TreeNode(left_mask), TreeNode(right_mask), split_value, split_col
 
 
 @partial(jit, static_argnames=["n_classes"])
@@ -90,72 +96,58 @@ def most_frequent(y: jnp.ndarray, mask: jnp.ndarray, n_classes: int) -> int:
 class TreeNode:
     def __init__(
         self,
-        X,
-        y,
         mask,
-        min_samples: int,
-        depth: int,
-        max_splits: int,
-        n_classes: int,
+        split_value=None,
+        split_col=None,
+        left_node=None,
+        right_node=None,
+        is_leaf=True,
+        leaf_value=None,
+        score=None,
     ):
-        self.n_samples = jnp.sum(mask)
-        self.score = entropy(y, mask, n_classes)
-        self.feature_names = None
-        self.target_names = None
+        self.mask = mask
+        self.split_value = split_value
+        self.split_col = split_col
+        self.left_node = left_node
+        self.right_node = right_node
+        self.is_leaf = is_leaf
+        self.leaf_value = leaf_value
+        self.score = score
 
-        if jnp.sum(mask) > min_samples and depth > 0:
-            (left_mask, right_mask, split_value, split_col) = split_node(
-                X, y, mask, max_splits, n_classes
-            )
-            self.is_leaf = False
-            self.left_node = TreeNode(
-                X, y, left_mask, min_samples, depth - 1, max_splits, n_classes
-            )
-            self.right_node = TreeNode(
-                X, y, right_mask, min_samples, depth - 1, max_splits, n_classes
-            )
-            self.split_value = split_value
-            self.split_col = split_col
-        else:
-            self.is_leaf = True
-            self.value = most_frequent(y, mask, n_classes)
-
-    def predict(
-        self, X: jnp.DeviceArray, mask: jnp.DeviceArray
-    ) -> jnp.DeviceArray:
+    def __str__(self) -> str:
+        text = f"n={jnp.sum(self.mask)}\n"
+        text += f"entropy={self.score:.2f}\n"
         if self.is_leaf:
-            return jnp.where(mask, self.value, jnp.nan)
+            text += f"value {self.leaf_value}"
         else:
-            left_mask = jnp.where(
-                X[:, self.split_col] >= self.split_value, mask, False
-            )
-            right_mask = jnp.where(
-                X[:, self.split_col] < self.split_value, mask, False
-            )
-            right_pred = self.right_node.predict(X, right_mask)
-            left_pred = self.left_node.predict(X, left_mask)
-            return jnp.where(
-                left_mask,
-                left_pred,
-                jnp.where(right_mask, right_pred, jnp.nan),
-            )
-
-    def __repr__(self) -> str:
-        text = f"n={self.n_samples}\n"
-        text += f"entropy {self.score:.2f}\n"
-        if not self.is_leaf:
-            if self.feature_names is not None:
-                col_name = self.feature_names[self.split_col]
-            else:
-                col_name = f"feature {self.split_col}"
-            text += f"{col_name} >= {self.split_value:.2f}"
-        else:
-            if self.target_names is not None:
-                target_name = self.target_names[self.value]
-            else:
-                target_name = f"{self.value:.2f}"
-            text += f"value {target_name}"
+            text += f"feature {self.split_col} >= {self.split_value:.2f}"
         return text
+
+
+def special_flatten(node: TreeNode):
+    children = (
+        node.mask,
+        node.split_value,
+        node.split_col,
+        node.left_node,
+        node.right_node,
+        node.is_leaf,
+        node.leaf_value,
+        node.score,
+    )
+    aux_data = None
+    return children, aux_data
+
+
+def special_unflatten(aux_data, children) -> TreeNode:
+    return TreeNode(*children)
+
+
+register_pytree_node(
+    TreeNode,
+    special_flatten,
+    special_unflatten,
+)
 
 
 class DecisionTreeClassifier:
@@ -178,22 +170,65 @@ class DecisionTreeClassifier:
         if mask is None:
             mask = jnp.ones_like(y)
         n_classes = jnp.size(jnp.bincount(y))
-        self.root = TreeNode(
-            X,
-            y,
-            mask,
-            min_samples=self.min_samples,
-            depth=self.max_depth,
-            max_splits=self.max_splits,
-            n_classes=n_classes,
-        )
+        self.root = TreeNode(mask)
+
+        to_split = [self.root]
+        for idx in range((2 ** (self.max_depth + 1)) - 1):
+            current_node = to_split.pop(0)
+            depth = int(math.log2(idx + 1))
+
+            if current_node is None:
+                to_split.extend((None, None))
+
+            elif (
+                depth < self.max_depth
+                and jnp.sum(current_node.mask) > self.min_samples
+            ):
+                (
+                    left_node,
+                    right_node,
+                    split_value,
+                    split_col,
+                ) = split_node(X, y, current_node, self.max_splits, n_classes)
+
+                current_node.score = entropy(y, current_node.mask, n_classes)
+                current_node.is_leaf = False
+                current_node.split_value = split_value
+                current_node.split_col = split_col
+                current_node.left_node = left_node
+                current_node.right_node = right_node
+                to_split.extend((left_node, right_node))
+            else:
+                current_node.score = entropy(y, current_node.mask, n_classes)
+                current_node.leaf_value = most_frequent(
+                    y, current_node.mask, n_classes
+                )
+                to_split.extend((None, None))
 
     def predict(self, X) -> jnp.DeviceArray:
         X = X.astype("float32")
         mask = jnp.ones((X.shape[0],))
         if self.root is None:
             raise ValueError("The model is not fitted.")
-        return self.root.predict(X, mask).astype("int16")
+
+        predictions = jnp.nan * jnp.zeros((X.shape[0],))
+        to_visit = [(self.root, mask)]
+        while len(to_visit) > 0:
+            current_node, current_mask = to_visit.pop(0)
+            if not current_node.is_leaf:
+                left_mask, right_mask = split_mask(
+                    current_node.split_value,
+                    X[:, current_node.split_col],
+                    current_mask,
+                )
+                to_visit.append((current_node.left_node, left_mask))
+                to_visit.append((current_node.right_node, right_mask))
+            else:
+                predictions = jnp.where(
+                    current_mask, current_node.leaf_value, predictions
+                )
+
+        return predictions
 
     def score(self, X: jnp.DeviceArray, y: jnp.DeviceArray) -> float:
         preds = self.predict(X)

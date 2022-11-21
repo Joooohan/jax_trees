@@ -37,5 +37,19 @@ The `fit` function would do something like:
  -    queue.append(left, right)
  -    tree.append
 
-The whole DecisionTree could be a queue of nodes though a deeper tree-like structure would be preferrable
+The whole DecisionTree could be a queue of nodes though a deeper tree-like
+structure would be preferrable.
+
+The conditions cannot depend at all from the input data content. This implies
+that the nodes created at each split need to have the same structure. If a Node
+holds a link to its children and every node need to have the same structure then
+we can only build an unlimited tree. We could have a node having a reference to
+it parent but then the tree exploration becomes difficult. A good solution would
+be to have the tree as a nested structure without nodes holding references to
+each other.
+
+The tree structure could be represented by a list of list with a structure like
+`tree[depth][rank]`. You know that `tree[level][rank]` has children
+`tree[level+1][2*rank]` and `tree[level+1][2*rank+1]`
+
 

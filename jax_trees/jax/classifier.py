@@ -63,7 +63,7 @@ compute_all_scores = vmap(
 def split_node(
     X: jnp.ndarray,
     y: jnp.ndarray,
-    current_node: TreeNode,
+    mask: jnp.ndarray,
     max_splits: int,
     n_classes: int,
 ) -> Tuple[jnp.ndarray, jnp.ndarray, float, int]:
@@ -75,18 +75,16 @@ def split_node(
     4. Generate two new masks for left and right children nodes
     """
     print("Tracing `split_node`")
-    points = split_points(X, current_node.mask, max_splits)
-    scores = compute_all_scores(X, y, current_node.mask, points, n_classes)
+    points = split_points(X, mask, max_splits)
+    scores = compute_all_scores(X, y, mask, points, n_classes)
 
     split_row, split_col = jnp.unravel_index(
         jnp.nanargmin(scores), scores.shape
     )
     split_value = points[split_row, split_col]
-    left_mask, right_mask = split_mask(
-        split_value, X[:, split_col], current_node.mask
-    )
+    left_mask, right_mask = split_mask(split_value, X[:, split_col], mask)
 
-    return TreeNode(left_mask), TreeNode(right_mask), split_value, split_col
+    return left_mask, right_mask, split_value, split_col
 
 
 @partial(jit, static_argnames=["n_classes"])
@@ -188,10 +186,10 @@ class DecisionTreeClassifier:
         return jnp.mean(preds == y)
 
 
-# @partial(
-#     jit,
-#     static_argnames=["n_classes", "max_depth", "min_samples", "max_splits"],
-# )
+@partial(
+    jit,
+    static_argnames=["n_classes", "max_depth", "min_samples", "max_splits"],
+)
 def _fit(
     X: jnp.ndarray,
     y: jnp.ndarray,
@@ -201,40 +199,44 @@ def _fit(
     min_samples: int,
     max_splits: int,
 ) -> TreeNode:
-    root = TreeNode(mask)
 
-    to_split = [root]
+    to_split = [mask]
     nodes = defaultdict(list)
-    nodes[0].append(root)
 
     for idx in range((2 ** (max_depth + 1)) - 1):
-        current_node = to_split.pop(0)
+        # getting current node mask
+        mask = to_split.pop(0)
         depth = int(math.log2(idx + 1))
 
-        if current_node is None:
-            left_node, right_node = None, None
+        score = entropy(y, mask, n_classes)
+        value = most_frequent(y, mask, n_classes)
 
-        elif depth < max_depth and jnp.sum(current_node.mask) > min_samples:
-            (
-                left_node,
-                right_node,
-                split_value,
-                split_col,
-            ) = split_node(X, y, current_node, max_splits, n_classes)
+        (
+            left_mask,
+            right_mask,
+            split_value,
+            split_col,
+        ) = split_node(X, y, mask, max_splits, n_classes)
 
-            current_node.score = entropy(y, current_node.mask, n_classes)
-            current_node.is_leaf = False
-            current_node.split_value = split_value
-            current_node.split_col = split_col
-        else:
-            current_node.score = entropy(y, current_node.mask, n_classes)
-            current_node.leaf_value = most_frequent(
-                y, current_node.mask, n_classes
-            )
-            left_node, right_node = None, None
+        is_leaf = jnp.array(
+            depth >= max_depth or jnp.sum(mask) <= min_samples,
+            dtype=jnp.int8,
+        )
 
-        to_split.extend((left_node, right_node))
-        nodes[depth + 1].extend([left_node, right_node])
+        # zero-out child masks if current node is a leaf
+        left_mask *= 1 - is_leaf
+        right_mask *= 1 - is_leaf
+
+        node = TreeNode(
+            mask=mask,
+            split_value=split_value,
+            split_col=split_col,
+            is_leaf=is_leaf,
+            leaf_value=value,
+            score=score,
+        )
+        nodes[depth].append(node)
+        to_split.extend((left_mask, right_mask))
 
     return nodes
 

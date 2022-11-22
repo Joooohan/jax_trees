@@ -1,5 +1,6 @@
 from collections import deque
 
+import jax.numpy as jnp
 import pygraphviz as pgv
 
 
@@ -32,7 +33,7 @@ def show_nodes(model) -> str:
 
     for depth in range(model.max_depth + 1):
         for rank, node in enumerate(model.nodes[depth]):
-            if node is None:
+            if jnp.sum(node.mask) == 0:
                 continue
             graph.add_node(hash(node), label=str(node))
             if not node.is_leaf:

@@ -31,6 +31,10 @@ def most_frequent(y: jnp.ndarray, mask: jnp.ndarray, n_classes: int) -> int:
     return jnp.nanargmax(counts)
 
 
+def accuracy(y_hat: jnp.array, y: jnp.array) -> jnp.array:
+    return jnp.mean(y_hat == y)
+
+
 @register_pytree_node_class
 class TreeNode:
     def __init__(
@@ -67,7 +71,7 @@ class TreeNode:
 
     def __str__(self) -> str:
         text = f"n={jnp.sum(self.mask)}\n"
-        text += f"entropy={self.score:.2f}\n"
+        text += f"loss={self.score:.2f}\n"
         if self.is_leaf:
             text += f"value {self.leaf_value}"
         else:
@@ -82,16 +86,18 @@ class DecisionTreeClassifier:
         min_samples: int = 2,
         max_depth: int = 4,
         max_splits: int = 25,
-        score_fn: Callable = entropy,
+        loss_fn: Callable = entropy,
         value_fn: Callable = most_frequent,
+        score_fn: Callable = accuracy,
         nodes: Dict[int, List[TreeNode]] = None,
     ):
         self.min_samples = min_samples
         self.max_depth = max_depth
         self.max_splits = max_splits
         self.score_fn = score_fn
+        self.loss_fn = loss_fn
         self.value_fn = value_fn
-        self.split_node = make_split_node_function(score_fn)
+        self.split_node = make_split_node_function(loss_fn)
         self.nodes = nodes
 
     def tree_flatten(self):
@@ -102,6 +108,7 @@ class DecisionTreeClassifier:
             "max_splits": self.max_splits,
             "score_fn": self.score_fn,
             "value_fn": self.value_fn,
+            "loss_fn": self.loss_fn,
         }
         return (children, aux_data)
 
@@ -139,7 +146,7 @@ class DecisionTreeClassifier:
             mask = to_split.pop(0)
             depth = int(math.log2(idx + 1))
 
-            score = self.score_fn(y, mask, n_classes)
+            score = self.loss_fn(y, mask, n_classes)
             value = self.value_fn(y, mask, n_classes)
 
             (
@@ -208,4 +215,4 @@ class DecisionTreeClassifier:
 
     def score(self, X: jnp.DeviceArray, y: jnp.DeviceArray) -> float:
         preds = self.predict(X)
-        return jnp.mean(preds == y)
+        return self.score_fn(preds, y)

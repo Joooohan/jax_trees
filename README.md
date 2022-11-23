@@ -50,6 +50,11 @@ each other.
 
 The tree structure could be represented by a list of list with a structure like
 `tree[depth][rank]`. You know that `tree[level][rank]` has children
-`tree[level+1][2*rank]` and `tree[level+1][2*rank+1]`
+`tree[level+1][2*rank]` and `tree[level+1][2*rank+1]`.
+
+## Retracing of inner JIT functions
+
+Inner functions are retraced when called several times as if the whole code was
+inlined. To avoid it we could primitives such as `lax.fori_loop` or `lax.scan`.
 
 

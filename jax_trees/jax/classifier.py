@@ -74,7 +74,6 @@ def split_node(
     3. Select the point with the lowest score
     4. Generate two new masks for left and right children nodes
     """
-    print("Tracing `split_node`")
     points = split_points(X, mask, max_splits)
     scores = compute_all_scores(X, y, mask, points, n_classes)
 
@@ -164,7 +163,7 @@ class DecisionTreeClassifier:
         if mask is None:
             mask = jnp.ones_like(y)
         n_classes = jnp.size(jnp.bincount(y))
-        self.nodes = _fit(
+        self.nodes = jitted_fit(
             X,
             y,
             mask,
@@ -179,7 +178,7 @@ class DecisionTreeClassifier:
         mask = jnp.ones((X.shape[0],))
         if self.nodes is None:
             raise ValueError("The model is not fitted.")
-        return _predict(X, mask, self.nodes, self.max_depth)
+        return jitted_predict(X, mask, self.nodes, self.max_depth)
 
     def score(self, X: jnp.DeviceArray, y: jnp.DeviceArray) -> float:
         preds = self.predict(X)
@@ -190,7 +189,7 @@ class DecisionTreeClassifier:
     jit,
     static_argnames=["n_classes", "max_depth", "min_samples", "max_splits"],
 )
-def _fit(
+def jitted_fit(
     X: jnp.ndarray,
     y: jnp.ndarray,
     mask: jnp.ndarray,
@@ -199,7 +198,6 @@ def _fit(
     min_samples: int,
     max_splits: int,
 ) -> TreeNode:
-
     to_split = [mask]
     nodes = defaultdict(list)
 
@@ -249,36 +247,31 @@ def split_mask(
     return left_mask, right_mask
 
 
-# @jit
-def _predict(
+@partial(jit, static_argnames=["max_depth"])
+def jitted_predict(
     X: jnp.array,
     mask: jnp.array,
     nodes: Dict[int, List[TreeNode]],
     max_depth: int,
 ) -> jnp.array:
     predictions = jnp.nan * jnp.zeros((X.shape[0],))
-    to_visit = [(nodes[0][0], mask)]
+    masks = defaultdict(list)
+    masks[0].append(mask)
     for depth in range(max_depth + 1):
         for rank, _ in enumerate(nodes[depth]):
-            current_node, current_mask = to_visit.pop(0)
-            if current_node is None:
-                to_visit.append((None, None))
-                to_visit.append((None, None))
-            elif not current_node.is_leaf:
-                left_mask, right_mask = split_mask(
-                    current_node.split_value,
-                    X[:, current_node.split_col],
-                    current_mask,
-                )
-                left_node = nodes[depth + 1][2 * rank]
-                right_node = nodes[depth + 1][2 * rank + 1]
-                to_visit.append((left_node, left_mask))
-                to_visit.append((right_node, right_mask))
-            else:
-                predictions = jnp.where(
-                    current_mask, current_node.leaf_value, predictions
-                )
-                to_visit.append((None, None))
-                to_visit.append((None, None))
+            current_mask = masks[depth][rank]
+            current_node = nodes[depth][rank]
+
+            predictions = jnp.where(
+                current_mask, current_node.leaf_value, predictions
+            )
+
+            left_mask, right_mask = split_mask(
+                current_node.split_value,
+                X[:, current_node.split_col],
+                current_mask,
+            )
+
+            masks[depth + 1].extend((left_mask, right_mask))
 
     return predictions

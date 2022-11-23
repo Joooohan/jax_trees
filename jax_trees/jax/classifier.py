@@ -3,13 +3,13 @@ from __future__ import annotations
 import math
 from collections import defaultdict
 from functools import partial
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional
 
 import jax.numpy as jnp
-from jax import jit, vmap
+from jax import jit
 from jax.tree_util import register_pytree_node, register_pytree_node_class
 
-from .utils import split_mask, split_points
+from .utils import make_split_node_function, split_mask
 
 
 @partial(jit, static_argnames=["n_classes"])
@@ -25,71 +25,13 @@ def entropy(y: jnp.ndarray, mask: jnp.ndarray, n_classes: int) -> float:
     return -jnp.sum(jnp.where(probs <= 0.0, 0.0, log_probs))
 
 
-def compute_score(
-    X_col: jnp.ndarray,
-    y: jnp.ndarray,
-    mask: jnp.ndarray,
-    split_value: float,
-    n_classes: int,
-) -> float:
-    """Compute the scores of data splits."""
-    left_mask, right_mask = split_mask(split_value, X_col, mask)
-
-    left_score = entropy(y, left_mask, n_classes)
-    right_score = entropy(y, right_mask, n_classes)
-
-    n_left = jnp.sum(left_mask)
-    n_right = jnp.sum(right_mask)
-
-    avg_score = (n_left * left_score + n_right * right_score) / (
-        n_left + n_right
-    )
-
-    return avg_score
-
-
-compute_column_scores = vmap(
-    compute_score, in_axes=(None, None, None, 0, None)
-)
-
-compute_all_scores = vmap(
-    compute_column_scores,
-    in_axes=(1, None, None, 1, None),
-    out_axes=1,
-)
-
-
-@partial(jit, static_argnames=["max_splits", "n_classes"])
-def split_node(
-    X: jnp.ndarray,
-    y: jnp.ndarray,
-    mask: jnp.ndarray,
-    max_splits: int,
-    n_classes: int,
-) -> Tuple[jnp.ndarray, jnp.ndarray, float, int]:
-    """The algorithm does the following:
-
-    1. Generate split points candidates (N_SPLITS, N_COLS) matrix
-    2. For each split point, compute the split score -> (N_SPLITS, N_COLS)
-    3. Select the point with the lowest score
-    4. Generate two new masks for left and right children nodes
-    """
-    points = split_points(X, mask, max_splits)
-    scores = compute_all_scores(X, y, mask, points, n_classes)
-
-    split_row, split_col = jnp.unravel_index(
-        jnp.nanargmin(scores), scores.shape
-    )
-    split_value = points[split_row, split_col]
-    left_mask, right_mask = split_mask(split_value, X[:, split_col], mask)
-
-    return left_mask, right_mask, split_value, split_col
-
-
 @partial(jit, static_argnames=["n_classes"])
 def most_frequent(y: jnp.ndarray, mask: jnp.ndarray, n_classes: int) -> int:
     counts = jnp.bincount(y, weights=mask, length=n_classes)
     return jnp.nanargmax(counts)
+
+
+split_node = make_split_node_function(entropy)
 
 
 class TreeNode:

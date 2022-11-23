@@ -3,7 +3,7 @@ from __future__ import annotations
 import math
 from collections import defaultdict
 from functools import partial
-from typing import Dict, List, Optional
+from typing import Callable, Dict, List, Optional
 
 import jax.numpy as jnp
 from jax import jit
@@ -29,9 +29,6 @@ def entropy(y: jnp.ndarray, mask: jnp.ndarray, n_classes: int) -> float:
 def most_frequent(y: jnp.ndarray, mask: jnp.ndarray, n_classes: int) -> int:
     counts = jnp.bincount(y, weights=mask, length=n_classes)
     return jnp.nanargmax(counts)
-
-
-split_node = make_split_node_function(entropy)
 
 
 @register_pytree_node_class
@@ -85,11 +82,16 @@ class DecisionTreeClassifier:
         min_samples: int = 2,
         max_depth: int = 4,
         max_splits: int = 25,
+        score_fn: Callable = entropy,
+        value_fn: Callable = most_frequent,
         nodes: Dict[int, List[TreeNode]] = None,
     ):
         self.min_samples = min_samples
         self.max_depth = max_depth
         self.max_splits = max_splits
+        self.score_fn = score_fn
+        self.value_fn = value_fn
+        self.split_node = make_split_node_function(score_fn)
         self.nodes = nodes
 
     def tree_flatten(self):
@@ -98,6 +100,8 @@ class DecisionTreeClassifier:
             "min_samples": self.min_samples,
             "max_depth": self.max_depth,
             "max_splits": self.max_splits,
+            "score_fn": self.score_fn,
+            "value_fn": self.value_fn,
         }
         return (children, aux_data)
 
@@ -135,15 +139,15 @@ class DecisionTreeClassifier:
             mask = to_split.pop(0)
             depth = int(math.log2(idx + 1))
 
-            score = entropy(y, mask, n_classes)
-            value = most_frequent(y, mask, n_classes)
+            score = self.score_fn(y, mask, n_classes)
+            value = self.value_fn(y, mask, n_classes)
 
             (
                 left_mask,
                 right_mask,
                 split_value,
                 split_col,
-            ) = split_node(X, y, mask, self.max_splits, n_classes)
+            ) = self.split_node(X, y, mask, self.max_splits, n_classes)
 
             is_leaf = jnp.array(
                 depth >= self.max_depth or jnp.sum(mask) <= self.min_samples,

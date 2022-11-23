@@ -7,7 +7,7 @@ from typing import Dict, List, Optional
 
 import jax.numpy as jnp
 from jax import jit
-from jax.tree_util import register_pytree_node, register_pytree_node_class
+from jax.tree_util import register_pytree_node_class
 
 from .utils import make_split_node_function, split_mask
 
@@ -34,6 +34,7 @@ def most_frequent(y: jnp.ndarray, mask: jnp.ndarray, n_classes: int) -> int:
 split_node = make_split_node_function(entropy)
 
 
+@register_pytree_node_class
 class TreeNode:
     def __init__(
         self,
@@ -51,6 +52,22 @@ class TreeNode:
         self.leaf_value = leaf_value
         self.score = score
 
+    def tree_flatten(self):
+        children = (
+            self.mask,
+            self.split_value,
+            self.split_col,
+            self.is_leaf,
+            self.leaf_value,
+            self.score,
+        )
+        aux_data = None
+        return children, aux_data
+
+    @classmethod
+    def tree_unflatten(cls, aux_data, children) -> TreeNode:
+        return cls(*children)
+
     def __str__(self) -> str:
         text = f"n={jnp.sum(self.mask)}\n"
         text += f"entropy={self.score:.2f}\n"
@@ -59,30 +76,6 @@ class TreeNode:
         else:
             text += f"feature {self.split_col} >= {self.split_value:.2f}"
         return text
-
-
-def special_flatten(node: TreeNode):
-    children = (
-        node.mask,
-        node.split_value,
-        node.split_col,
-        node.is_leaf,
-        node.leaf_value,
-        node.score,
-    )
-    aux_data = None
-    return children, aux_data
-
-
-def special_unflatten(aux_data, children) -> TreeNode:
-    return TreeNode(*children)
-
-
-register_pytree_node(
-    TreeNode,
-    special_flatten,
-    special_unflatten,
-)
 
 
 @register_pytree_node_class

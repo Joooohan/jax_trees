@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import math
 from collections import defaultdict
-from functools import partial
 from typing import Callable, Dict, List, Optional
 
 import jax.numpy as jnp
@@ -94,27 +93,21 @@ class DecisionTree:
         (nodes,) = children
         return cls(**aux_data, nodes=nodes)
 
+    @jit
     def fit(
         self,
         X: jnp.ndarray,
         y: jnp.ndarray,
-        mask: Optional[jnp.ndarray] = None,
-    ) -> None:
-        X = X.astype("float32")
-        y = y.astype("int16")
+        mask: jnp.ndarray = None,
+    ) -> TreeNode:
+        """Fit the model to the data.
 
+        Since this function is functionally pure, the fitted model is returned
+        as a result.
+        """
         if mask is None:
             mask = jnp.ones_like(y)
 
-        self.nodes = self.jitted_fit(X, y, mask)
-
-    @partial(jit, static_argnames="n_classes")
-    def jitted_fit(
-        self,
-        X: jnp.ndarray,
-        y: jnp.ndarray,
-        mask: jnp.ndarray,
-    ) -> TreeNode:
         to_split = [mask]
         nodes = defaultdict(list)
 
@@ -153,7 +146,8 @@ class DecisionTree:
             nodes[depth].append(node)
             to_split.extend((left_mask, right_mask))
 
-        return nodes
+        self.nodes = nodes
+        return self
 
     @jit
     def predict(

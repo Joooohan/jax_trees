@@ -37,38 +37,30 @@ def accuracy(y_hat: jnp.array, y: jnp.array) -> jnp.array:
 class DecisionTreeClassifier(DecisionTree):
     def __init__(
         self,
+        n_classes: int,
         min_samples: int = 2,
         max_depth: int = 4,
         max_splits: int = 25,
-        loss_fn: Callable = entropy,
-        value_fn: Callable = most_frequent,
-        score_fn: Callable = accuracy,
         nodes: Dict[int, List[TreeNode]] = None,
     ):
+        self.n_classes = n_classes
+
         super().__init__(
             min_samples=min_samples,
             max_depth=max_depth,
             max_splits=max_splits,
-            loss_fn=loss_fn,
-            value_fn=value_fn,
-            score_fn=score_fn,
+            loss_fn=partial(entropy, n_classes=n_classes),
+            value_fn=partial(most_frequent, n_classes=n_classes),
+            score_fn=accuracy,
             nodes=nodes,
         )
 
-    def fit(
-        self,
-        X: jnp.ndarray,
-        y: jnp.ndarray,
-        mask: Optional[jnp.ndarray] = None,
-    ) -> None:
-        X = X.astype("float32")
-        y = y.astype("int16")
-        n_classes = jnp.size(jnp.bincount(y))
-
-        self.loss_fn = partial(self.loss_fn, n_classes=n_classes)
-        self.value_fn = partial(self.value_fn, n_classes=n_classes)
-
-        if mask is None:
-            mask = jnp.ones_like(y)
-
-        self.nodes = self.jitted_fit(X, y, mask)
+    def tree_flatten(self):
+        children = [self.nodes]
+        aux_data = {
+            "min_samples": self.min_samples,
+            "max_depth": self.max_depth,
+            "max_splits": self.max_splits,
+            "n_classes": self.n_classes,
+        }
+        return (children, aux_data)

@@ -31,17 +31,23 @@ class DecisionTreeRegressor(DecisionTree):
         min_samples: int = 2,
         max_depth: int = 4,
         max_splits: int = 25,
-        loss_fn: Callable = variance,
-        value_fn: Callable = average,
-        score_fn: Callable = r2_score,
         nodes: Dict[int, List[TreeNode]] = None,
     ):
         super().__init__(
             min_samples=min_samples,
             max_depth=max_depth,
             max_splits=max_splits,
-            loss_fn=loss_fn,
-            value_fn=value_fn,
-            score_fn=score_fn,
+            loss_fn=variance,
+            value_fn=average,
+            score_fn=r2_score,
             nodes=nodes,
         )
+
+    def tree_flatten(self):
+        children = [self.nodes]
+        aux_data = {
+            "min_samples": self.min_samples,
+            "max_depth": self.max_depth,
+            "max_splits": self.max_splits,
+        }
+        return (children, aux_data)

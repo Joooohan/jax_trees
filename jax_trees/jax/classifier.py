@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from functools import partial
-from typing import Callable, Dict, List, Optional
+from typing import Dict, List
 
 import jax.numpy as jnp
 from jax import jit

@@ -1,4 +1,4 @@
-from typing import Callable, Dict, List
+from typing import Dict, List
 
 import jax.numpy as jnp
 from jax.tree_util import register_pytree_node_class

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import math
 from collections import defaultdict
-from typing import Callable, Dict, List, Optional
+from typing import Callable, Dict, List
 
 import jax.numpy as jnp
 from jax import jit
@@ -13,6 +13,18 @@ from .utils import make_split_node_function, split_mask
 
 @register_pytree_node_class
 class TreeNode:
+    """Class representing a node in the tree.
+
+    For jitting to be polyvalent, the same node structure should be used to
+    represent nodes, leaves and phantom nodes.
+
+    The boolean `is_leaf` indicates if the node is a leaf and should be used to
+    make a prediction.
+
+    If the `mask` only contains zeros, then the node is actually a phantom node,
+    that is, positionned below a leaf node and is not used.
+    """
+
     def __init__(
         self,
         mask: jnp.ndarray,

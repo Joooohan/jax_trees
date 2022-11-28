@@ -55,23 +55,6 @@ class DecisionTreeClassifier(DecisionTree):
             nodes=nodes,
         )
 
-    def tree_flatten(self):
-        children = [self.nodes]
-        aux_data = {
-            "min_samples": self.min_samples,
-            "max_depth": self.max_depth,
-            "max_splits": self.max_splits,
-            "score_fn": self.score_fn,
-            "value_fn": self.value_fn,
-            "loss_fn": self.loss_fn,
-        }
-        return (children, aux_data)
-
-    @classmethod
-    def tree_unflatten(cls, aux_data, children):
-        (nodes,) = children
-        return cls(**aux_data, nodes=nodes)
-
     def fit(
         self,
         X: jnp.ndarray,

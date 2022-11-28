@@ -57,4 +57,9 @@ The tree structure could be represented by a list of list with a structure like
 Inner functions are retraced when called several times as if the whole code was
 inlined. To avoid it we could primitives such as `lax.fori_loop` or `lax.scan`.
 
+If we only use shallow trees that we reuse multiple times like in boosted trees
+or random forest then the strategy of tracing the whole iteration is not so
+terrible.
 
+However for tree with a depth greater than 4 the jitting time explodes
+exponentially making the use of this strategy impractical.

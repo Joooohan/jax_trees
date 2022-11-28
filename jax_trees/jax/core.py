@@ -155,19 +155,20 @@ class DecisionTree:
 
         return nodes
 
-    def predict(self, X: jnp.ndarray) -> jnp.DeviceArray:
-        X = X.astype("float32")
-        mask = jnp.ones((X.shape[0],))
-        if self.nodes is None:
-            raise ValueError("The model is not fitted.")
-        return self.jitted_predict(X, mask)
-
     @jit
-    def jitted_predict(
+    def predict(
         self,
         X: jnp.array,
-        mask: jnp.array,
+        mask: jnp.array = None,
     ) -> jnp.array:
+        X = X.astype("float32")
+
+        if mask is None:
+            mask = jnp.ones((X.shape[0],))
+
+        if self.nodes is None:
+            raise ValueError("The model is not fitted.")
+
         predictions = jnp.nan * jnp.zeros((X.shape[0],))
         masks = defaultdict(list)
         masks[0].append(mask)

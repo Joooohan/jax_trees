@@ -58,7 +58,7 @@ class TreeNode:
         return cls(*children)
 
     def show(self, rank: int) -> str:
-        text = f"n={jnp.sum(self.mask[rank])}\n"
+        text = f"n={int(jnp.sum(self.mask[rank]))}\n"
         text += f"loss={self.score[rank]:.2f}\n"
         if self.is_leaf[rank]:
             text += f"value {self.leaf_value[rank]}"
@@ -121,12 +121,12 @@ class DecisionTree:
         if mask is None:
             mask = jnp.ones((n_samples,))
 
-        level_masks = jnp.stack([mask], axis=0)
+        masks = jnp.stack([mask], axis=0)
         self.nodes = defaultdict(list)
 
         for depth in range(self.max_depth + 1):
 
-            def fn(carry, mask):
+            def split_node(carry, mask):
                 score = self.loss_fn(y, mask)
                 value = self.value_fn(y, mask)
                 (
@@ -156,14 +156,14 @@ class DecisionTree:
                 children_mask = jnp.stack([left_mask, right_mask], axis=0)
                 return carry, (children_mask, node)
 
-            _, (children_masks, nodes) = lax.scan(
-                f=fn,
+            _, (next_masks, nodes) = lax.scan(
+                f=split_node,
                 init=None,
-                xs=level_masks,
+                xs=masks,
             )
 
             self.nodes[depth] = nodes
-            level_masks = jnp.reshape(children_masks, (-1, n_samples))
+            masks = jnp.reshape(next_masks, (-1, n_samples))
 
         return self
 

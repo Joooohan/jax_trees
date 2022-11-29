@@ -82,4 +82,5 @@ tracing would decrease exponentially from `2**n` to `n` where `n` is the tree
 depth.
 
 Implementing the tracing at each level using scan works but produces naturally
-vectorized tree nodes.
+vectorized tree nodes. To account for this new structure we use `vmap` in the
+predict step to vectorize the computation of the output.

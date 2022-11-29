@@ -32,17 +32,19 @@ def show_nodes(model) -> str:
     graph.node_attr.update(shape="box")
 
     for depth in range(model.max_depth + 1):
-        for rank, node in enumerate(model.nodes[depth]):
-            if jnp.sum(node.mask) == 0:
+        node = model.nodes[depth]
+        for rank in range(2**depth):
+            if jnp.sum(node.mask[rank]) == 0:
                 continue
-            graph.add_node(hash(node), label=str(node))
-            if not node.is_leaf:
-                left_node = model.nodes[depth + 1][2 * rank]
-                right_node = model.nodes[depth + 1][2 * rank + 1]
-                graph.add_node(hash(right_node), label=str(right_node))
-                graph.add_node(hash(left_node), label=str(left_node))
+            node_id = f"{depth}_{rank}"
+            graph.add_node(node_id, label=node.show(rank))
+            if not node.is_leaf[rank]:
+                left_id = f"{depth+1}_{2*rank}"
+                right_id = f"{depth+1}_{2*rank+1}"
+                # graph.add_node(left_id, label=str(right_node))
+                # graph.add_node(right_id, label=str(left_node))
 
-                graph.add_edge(hash(node), hash(right_node), label="no")
-                graph.add_edge(hash(node), hash(left_node), label="yes")
+                graph.add_edge(node_id, right_id, label="no")
+                graph.add_edge(node_id, left_id, label="yes")
 
     return graph.string()

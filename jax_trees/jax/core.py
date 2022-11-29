@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-import math
 from collections import defaultdict
+from functools import partial
 from typing import Callable, Dict, List
 
 import jax.numpy as jnp
-from jax import jit
+from jax import jit, lax, vmap
 from jax.tree_util import register_pytree_node_class
 
 from .utils import make_split_node_function, split_mask
@@ -57,13 +57,13 @@ class TreeNode:
     def tree_unflatten(cls, aux_data, children) -> TreeNode:
         return cls(*children)
 
-    def __str__(self) -> str:
-        text = f"n={jnp.sum(self.mask)}\n"
-        text += f"loss={self.score:.2f}\n"
-        if self.is_leaf:
-            text += f"value {self.leaf_value}"
+    def show(self, rank: int) -> str:
+        text = f"n={jnp.sum(self.mask[rank])}\n"
+        text += f"loss={self.score[rank]:.2f}\n"
+        if self.is_leaf[rank]:
+            text += f"value {self.leaf_value[rank]}"
         else:
-            text += f"feature {self.split_col} >= {self.split_value:.2f}"
+            text += f"feature {self.split_col[rank]} >= {self.split_value[rank]:.2f}"
         return text
 
 
@@ -117,20 +117,18 @@ class DecisionTree:
         Since this function is functionally pure, the fitted model is returned
         as a result.
         """
+        n_samples = X.shape[0]
         if mask is None:
-            mask = jnp.ones_like(y)
+            mask = jnp.ones((n_samples,))
 
-        to_split = [mask]
-        nodes = defaultdict(list)
+        level_masks = jnp.stack([mask], axis=0)
+        self.nodes = defaultdict(list)
 
         for depth in range(self.max_depth + 1):
-            for _ in range(2**depth):
-                # getting current node mask
-                mask = to_split.pop(0)
 
+            def fn(carry, mask):
                 score = self.loss_fn(y, mask)
                 value = self.value_fn(y, mask)
-
                 (
                     left_mask,
                     right_mask,
@@ -143,7 +141,6 @@ class DecisionTree:
                     or jnp.sum(mask) <= self.min_samples,
                     dtype=jnp.int8,
                 )
-
                 # zero-out child masks if current node is a leaf
                 left_mask *= 1 - is_leaf
                 right_mask *= 1 - is_leaf
@@ -156,10 +153,18 @@ class DecisionTree:
                     leaf_value=value,
                     score=score,
                 )
-                nodes[depth].append(node)
-                to_split.extend((left_mask, right_mask))
+                children_mask = jnp.stack([left_mask, right_mask], axis=0)
+                return carry, (children_mask, node)
 
-        self.nodes = nodes
+            _, (children_masks, nodes) = lax.scan(
+                f=fn,
+                init=None,
+                xs=level_masks,
+            )
+
+            self.nodes[depth] = nodes
+            level_masks = jnp.reshape(children_masks, (-1, n_samples))
+
         return self
 
     @jit
@@ -169,34 +174,37 @@ class DecisionTree:
         mask: jnp.ndarray = None,
     ) -> jnp.ndarray:
         X = X.astype("float32")
+        n_samples = X.shape[0]
 
         if mask is None:
-            mask = jnp.ones((X.shape[0],))
+            mask = jnp.ones((n_samples,))
 
         if self.nodes is None:
             raise ValueError("The model is not fitted.")
 
-        predictions = jnp.nan * jnp.zeros((X.shape[0],))
-        masks = defaultdict(list)
-        masks[0].append(mask)
+        @vmap
+        def split_and_predict(node, mask):
+            left_mask, right_mask = split_mask(
+                node.split_value,
+                X.at[:, node.split_col].get(),
+                mask,
+            )
+            predictions = jnp.where(
+                mask * node.is_leaf, node.leaf_value, jnp.nan
+            )
+            child_mask = jnp.stack([left_mask, right_mask], axis=0)
+            return child_mask, predictions
+
+        predictions = []
+        level_masks = jnp.stack([mask], axis=0)
         for depth in range(self.max_depth + 1):
-            for rank in range(2**depth):
-                current_mask = masks[depth][rank]
-                current_node = self.nodes[depth][rank]
+            next_masks, level_predictions = split_and_predict(
+                self.nodes[depth], level_masks
+            )
+            level_masks = jnp.reshape(next_masks, (-1, n_samples))
+            predictions.append(jnp.nansum(level_predictions, axis=0))
 
-                predictions = jnp.where(
-                    current_mask, current_node.leaf_value, predictions
-                )
-
-                left_mask, right_mask = split_mask(
-                    current_node.split_value,
-                    X[:, current_node.split_col],
-                    current_mask,
-                )
-
-                masks[depth + 1].extend((left_mask, right_mask))
-
-        return predictions
+        return jnp.nansum(jnp.stack(predictions, axis=0), axis=0)
 
     def score(self, X: jnp.DeviceArray, y: jnp.DeviceArray) -> float:
         preds = self.predict(X)

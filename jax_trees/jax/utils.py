@@ -85,6 +85,7 @@ def split_node_generic(
     3. Select the point with the lowest score
     4. Generate two new masks for left and right children nodes
     """
+    print("tracing split_node")
     points = split_points(X, mask, max_splits)
     scores = compute_all_scores(X, y, mask, points)
 

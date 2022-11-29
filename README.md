@@ -52,6 +52,9 @@ The tree structure could be represented by a list of list with a structure like
 `tree[depth][rank]`. You know that `tree[level][rank]` has children
 `tree[level+1][2*rank]` and `tree[level+1][2*rank+1]`.
 
+For the `fit` and `predict` methods to be jitted, the class must be registered
+as a Pytree custom type.
+
 ## Retracing of inner JIT functions
 
 Inner functions are retraced when called several times as if the whole code was
@@ -63,3 +66,17 @@ terrible.
 
 However for tree with a depth greater than 4 the jitting time explodes
 exponentially making the use of this strategy impractical.
+
+# Reducing the number of tracing
+
+To avoid retracing the functions in every loop iteration we need to use the
+`jax.lax.scan` primitive that allows us to execute several times a function
+traced a single time.
+
+The loop takes a sequence as input and ouput a sequence of values. We could use
+`jax.vmap` instead also to avoid calling `scan` and ignoring the carry over.
+
+At each depth, we iterate over the nodes of the level and we produce the nodes
+of the next level. We could implement the inner loop using `scan`. The number of
+tracing would decrease exponentially from `2**n` to `n` where `n` is the tree
+depth.

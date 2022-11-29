@@ -123,40 +123,41 @@ class DecisionTree:
         to_split = [mask]
         nodes = defaultdict(list)
 
-        for idx in range((2 ** (self.max_depth + 1)) - 1):
-            # getting current node mask
-            mask = to_split.pop(0)
-            depth = int(math.log2(idx + 1))
+        for depth in range(self.max_depth + 1):
+            for _ in range(2**depth):
+                # getting current node mask
+                mask = to_split.pop(0)
 
-            score = self.loss_fn(y, mask)
-            value = self.value_fn(y, mask)
+                score = self.loss_fn(y, mask)
+                value = self.value_fn(y, mask)
 
-            (
-                left_mask,
-                right_mask,
-                split_value,
-                split_col,
-            ) = self.split_node(X, y, mask, self.max_splits)
+                (
+                    left_mask,
+                    right_mask,
+                    split_value,
+                    split_col,
+                ) = self.split_node(X, y, mask, self.max_splits)
 
-            is_leaf = jnp.array(
-                depth >= self.max_depth or jnp.sum(mask) <= self.min_samples,
-                dtype=jnp.int8,
-            )
+                is_leaf = jnp.array(
+                    depth >= self.max_depth
+                    or jnp.sum(mask) <= self.min_samples,
+                    dtype=jnp.int8,
+                )
 
-            # zero-out child masks if current node is a leaf
-            left_mask *= 1 - is_leaf
-            right_mask *= 1 - is_leaf
+                # zero-out child masks if current node is a leaf
+                left_mask *= 1 - is_leaf
+                right_mask *= 1 - is_leaf
 
-            node = TreeNode(
-                mask=mask,
-                split_value=split_value,
-                split_col=split_col,
-                is_leaf=is_leaf,
-                leaf_value=value,
-                score=score,
-            )
-            nodes[depth].append(node)
-            to_split.extend((left_mask, right_mask))
+                node = TreeNode(
+                    mask=mask,
+                    split_value=split_value,
+                    split_col=split_col,
+                    is_leaf=is_leaf,
+                    leaf_value=value,
+                    score=score,
+                )
+                nodes[depth].append(node)
+                to_split.extend((left_mask, right_mask))
 
         self.nodes = nodes
         return self
@@ -164,9 +165,9 @@ class DecisionTree:
     @jit
     def predict(
         self,
-        X: jnp.array,
-        mask: jnp.array = None,
-    ) -> jnp.array:
+        X: jnp.ndarray,
+        mask: jnp.ndarray = None,
+    ) -> jnp.ndarray:
         X = X.astype("float32")
 
         if mask is None:
@@ -179,7 +180,7 @@ class DecisionTree:
         masks = defaultdict(list)
         masks[0].append(mask)
         for depth in range(self.max_depth + 1):
-            for rank, _ in enumerate(self.nodes[depth]):
+            for rank in range(2**depth):
                 current_mask = masks[depth][rank]
                 current_node = self.nodes[depth][rank]
 

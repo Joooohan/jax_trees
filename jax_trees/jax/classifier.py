@@ -25,7 +25,7 @@ def entropy(y: jnp.ndarray, mask: jnp.ndarray, n_classes: int) -> float:
 
 @partial(jit, static_argnames=["n_classes"])
 def most_frequent(y: jnp.ndarray, mask: jnp.ndarray, n_classes: int) -> int:
-    counts = jnp.bincount(y, weights=mask, length=n_classes)
+    counts = jnp.bincount(y.astype(jnp.int8), weights=mask, length=n_classes)
     return jnp.nanargmax(counts)
 
 

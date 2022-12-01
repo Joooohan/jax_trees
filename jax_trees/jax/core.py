@@ -124,44 +124,44 @@ class DecisionTree:
         masks = jnp.stack([mask], axis=0)
         self.nodes = defaultdict(list)
 
+        def split_node(carry, x):
+            depth, mask = x
+            score = self.loss_fn(y, mask)
+            value = self.value_fn(y, mask)
+            (
+                left_mask,
+                right_mask,
+                split_value,
+                split_col,
+            ) = self.split_node(X, y, mask, self.max_splits)
+
+            is_leaf = jnp.maximum(depth + 1 - self.max_depth, 0) + jnp.maximum(
+                self.min_samples + 1 - jnp.sum(mask), 0
+            )
+            is_leaf = jnp.minimum(is_leaf, 1).astype(jnp.int8)
+
+            # zero-out child masks if current node is a leaf
+            left_mask *= 1 - is_leaf
+            right_mask *= 1 - is_leaf
+
+            node = TreeNode(
+                mask=mask,
+                split_value=split_value,
+                split_col=split_col,
+                is_leaf=is_leaf,
+                leaf_value=value,
+                score=score,
+            )
+            children_mask = jnp.stack([left_mask, right_mask], axis=0)
+            return carry, (children_mask, node)
+
         for depth in range(self.max_depth + 1):
-
-            def split_node(carry, mask):
-                score = self.loss_fn(y, mask)
-                value = self.value_fn(y, mask)
-                (
-                    left_mask,
-                    right_mask,
-                    split_value,
-                    split_col,
-                ) = self.split_node(X, y, mask, self.max_splits)
-
-                is_leaf = jnp.array(
-                    depth >= self.max_depth
-                    or jnp.sum(mask) <= self.min_samples,
-                    dtype=jnp.int8,
-                )
-                # zero-out child masks if current node is a leaf
-                left_mask *= 1 - is_leaf
-                right_mask *= 1 - is_leaf
-
-                node = TreeNode(
-                    mask=mask,
-                    split_value=split_value,
-                    split_col=split_col,
-                    is_leaf=is_leaf,
-                    leaf_value=value,
-                    score=score,
-                )
-                children_mask = jnp.stack([left_mask, right_mask], axis=0)
-                return carry, (children_mask, node)
-
+            depths = depth * jnp.ones((masks.shape[0],))
             _, (next_masks, nodes) = lax.scan(
                 f=split_node,
                 init=None,
-                xs=masks,
+                xs=(depths, masks),
             )
-
             self.nodes[depth] = nodes
             masks = jnp.reshape(next_masks, (-1, n_samples))
 

@@ -24,9 +24,7 @@ class RandomForest:
         **kwargs: Any,
     ):
         self.base_class = base_class
-        self.base_model = base_class(
-            **kwargs,
-        )
+        self.base_model = base_class(**kwargs)
         self.n_estimators = n_estimators
         self.predictors = predictors
 

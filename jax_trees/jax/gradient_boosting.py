@@ -2,7 +2,8 @@ from typing import Callable, Optional, Tuple
 
 import jax
 import jax.numpy as jnp
-from jax import grad, lax, nn, vmap
+from jax import grad, jit, lax, nn, vmap
+from jax.tree_util import register_pytree_node_class
 
 from .classifier import accuracy
 from .regressor import DecisionTreeRegressor, r2_score
@@ -30,10 +31,14 @@ class GradientBoostedMachine:
         predict_wl: Callable,
         score_fn: Callable,
         base_value: Optional[jnp.ndarray] = None,
+        predictors: Optional[jnp.ndarray] = None,
     ):
+        self.base_value = base_value
+        self.predictors = predictors
+
         self.n_estimators = n_estimators
         self.learning_rate = learning_rate
-        self.kwargs = {
+        self.tree_args = {
             "min_samples": min_samples,
             "max_depth": max_depth,
             "max_splits": max_splits,
@@ -41,14 +46,32 @@ class GradientBoostedMachine:
         self.loss = loss
         self.fit_wl = fit_wl
         self.predict_wl = predict_wl
-        self.base_value = base_value
         self.score_fn = score_fn
+
+        # Used to serialize the model
+        self.aux_data = {
+            "n_estimators": n_estimators,
+            "learning_rate": learning_rate,
+            "min_samples": min_samples,
+            "max_depth": max_depth,
+            "max_splits": max_splits,
+        }
+
+    def tree_flatten(self):
+        children = [self.predictors, self.base_value]
+        return (children, self.aux_data)
+
+    @classmethod
+    def tree_unflatten(cls, aux_data, children):
+        (predictors, base_value) = children
+        return cls(**aux_data, predictors=predictors, base_value=base_value)
 
     def preprocess(
         self, X: jnp.ndarray, y: jnp.ndarray
     ) -> Tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]:
         raise NotImplementedError
 
+    @jit
     def fit(self, X: jnp.ndarray, y: jnp.ndarray) -> None:
         X, y, self.base_value = self.preprocess(X, y)
 
@@ -58,7 +81,7 @@ class GradientBoostedMachine:
         )
 
         def fit_weak_learner(preds, x):
-            model = DecisionTreeRegressor(**self.kwargs)
+            model = DecisionTreeRegressor(**self.tree_args)
             residuals = -grad(self.loss)(preds, y)
             fitted_model = self.fit_wl(model, X, residuals)
             weak_preds = self.predict_wl(fitted_model, X)
@@ -74,6 +97,7 @@ class GradientBoostedMachine:
         self.predictors = predictors
         return self
 
+    @jit
     def predict(self, X: jnp.ndarray) -> jnp.ndarray:
         if self.base_value is None:
             raise ValueError("Model is not fitted.")
@@ -91,6 +115,7 @@ class GradientBoostedMachine:
         return self.score_fn(preds, y)
 
 
+@register_pytree_node_class
 class GradientBoostedRegressor(GradientBoostedMachine):
     def __init__(
         self,
@@ -99,6 +124,8 @@ class GradientBoostedRegressor(GradientBoostedMachine):
         min_samples: int = 2,
         max_depth: int = 4,
         max_splits: int = 25,
+        base_value: Optional[jnp.ndarray] = None,
+        predictors: Optional[jnp.ndarray] = None,
     ):
         super().__init__(
             n_estimators=n_estimators,
@@ -110,6 +137,8 @@ class GradientBoostedRegressor(GradientBoostedMachine):
             loss=mean_square_error,
             fit_wl=DecisionTreeRegressor.fit,
             predict_wl=DecisionTreeRegressor.predict,
+            base_value=base_value,
+            predictors=predictors,
         )
 
     def preprocess(
@@ -119,6 +148,7 @@ class GradientBoostedRegressor(GradientBoostedMachine):
         return X, y, base_value
 
 
+@register_pytree_node_class
 class GradientBoostedClassifier(GradientBoostedMachine):
     def __init__(
         self,
@@ -128,6 +158,8 @@ class GradientBoostedClassifier(GradientBoostedMachine):
         min_samples: int = 2,
         max_depth: int = 4,
         max_splits: int = 25,
+        base_value: Optional[jnp.ndarray] = None,
+        predictors: Optional[jnp.ndarray] = None,
     ):
         super().__init__(
             n_estimators=n_estimators,
@@ -141,8 +173,11 @@ class GradientBoostedClassifier(GradientBoostedMachine):
             predict_wl=vmap(
                 DecisionTreeRegressor.predict, in_axes=[0, None], out_axes=1
             ),
+            base_value=base_value,
+            predictors=predictors,
         )
         self.n_classes = n_classes
+        self.aux_data["n_classes"] = n_classes
 
     def preprocess(
         self, X: jnp.ndarray, y: jnp.ndarray
@@ -153,6 +188,7 @@ class GradientBoostedClassifier(GradientBoostedMachine):
         log_probs = jnp.log(probs)
         return X, y_oh, log_probs
 
+    @jit
     def predict(self, X: jnp.ndarray) -> jnp.ndarray:
         logits = super().predict(X)
         key = jax.random.PRNGKey(seed=0)

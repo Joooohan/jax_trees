@@ -7,7 +7,7 @@ from .jax import (
     RandomForestRegressor,
 )
 
-VERSION = "0.0.2"
+VERSION = "0.0.3"
 
 __all__ = [
     "DecisionTreeClassifier",

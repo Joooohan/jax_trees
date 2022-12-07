@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from functools import partial
 from typing import Callable, Dict, List
 
 import jax.numpy as jnp
@@ -21,8 +20,8 @@ class TreeNode:
     The boolean `is_leaf` indicates if the node is a leaf and should be used to
     make a prediction.
 
-    If the `mask` only contains zeros, then the node is actually a phantom node,
-    that is, positionned below a leaf node and is not used.
+    If the `mask` only contains zeros, then the node is actually a phantom
+    node, that is, positionned below a leaf node and is not used.
     """
 
     def __init__(
@@ -63,7 +62,10 @@ class TreeNode:
         if self.is_leaf[rank]:
             text += f"value {self.leaf_value[rank]}"
         else:
-            text += f"feature {self.split_col[rank]} >= {self.split_value[rank]:.2f}"
+            text += (
+                f"feature {self.split_col[rank]} "
+                f">= {self.split_value[rank]:.2f}"
+            )
         return text
 
 

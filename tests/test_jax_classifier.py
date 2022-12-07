@@ -2,9 +2,14 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from jax_trees.jax.classifier import (compute_all_scores,
-                                      compute_column_scores, compute_score,
-                                      entropy, most_frequent, split_node)
+from jax_trees.jax.classifier import (
+    compute_all_scores,
+    compute_column_scores,
+    compute_score,
+    entropy,
+    most_frequent,
+    split_node,
+)
 
 N_SAMPLES = 100
 N_CLASSES = 3

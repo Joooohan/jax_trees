@@ -1,3 +1,5 @@
 from setuptools import setup
 
-setup()
+from jax_trees import VERSION
+
+setup(version=VERSION)

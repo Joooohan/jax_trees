@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from typing import Callable, Optional, Tuple
 
 import jax
@@ -72,7 +74,7 @@ class GradientBoostedMachine:
         raise NotImplementedError
 
     @jit
-    def fit(self, X: jnp.ndarray, y: jnp.ndarray) -> None:
+    def fit(self, X: jnp.ndarray, y: jnp.ndarray) -> GradientBoostedMachine:
         X, y, self.base_value = self.preprocess(X, y)
 
         n_samples = X.shape[0]

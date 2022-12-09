@@ -108,67 +108,75 @@ no side effect. This means that we cannot update the model parameters inplace
 using fit. Instead, we return the fitted model as output of the fit method
 `fitted_model = model.fit(...)`.
 
-### JIT performance
-...
+### JIT compilation performance
 
-The idea would be to have a function `split_node(TreeNode, X, y) ->
-[TreeNode,TreeNode]` This function can be jitted if the `TreeNode` is a Pytree.
-The `TreeNode` is specified by a `split_value`, a `split_column`, a `leaf_value`
-and a `mask`.
+The first implementation of the jitted fit function looked like this:
 
-The `fit` function would do something like:
- - Create the root TreeNode and add it to the list of nodes to explore
- - tree = [root]
- - for _ in range(2^n-1):
- -    node = queue.pop()
- -    left, right = split_node(node, X, y)
- -    queue.append(left, right)
- -    tree.append
+```python
+@register_pytree_node_class
+class DecisionTree:
+    ...
 
-The whole DecisionTree could be a queue of nodes though a deeper tree-like
-structure would be preferrable.
+    @jit
+    def fit(self, X: jnp.ndarray, y: jnp.ndarray) -> DecisionTree:
+        nodes = defaultdict()
+        n_samples = X.shape[0]
 
-The conditions cannot depend at all from the input data content. This implies
-that the nodes created at each split need to have the same structure. If a Node
-holds a link to its children and every node need to have the same structure then
-we can only build an unlimited tree. We could have a node having a reference to
-it parent but then the tree exploration becomes difficult. A good solution would
-be to have the tree as a nested structure without nodes holding references to
-each other.
+        next_masks = [jnp.ones((n_samples,))]
+        for depth in range(self.max_depth):
+            masks = next_masks
+            next_masks = []
 
-The tree structure could be represented by a list of list with a structure like
-`tree[depth][rank]`. You know that `tree[level][rank]` has children
-`tree[level+1][2*rank]` and `tree[level+1][2*rank+1]`.
+            for rank in range(2**depth):
+                current_mask = nodes[depth][rank]
+                left_mask, right_mask, current_node = split_node(current_mask)
+                nodes[depth].append(current_node)
+                next_masks.extend([left_mask, right_mask])
 
-For the `fit` and `predict` methods to be jitted, the class must be registered
-as a Pytree custom type.
+        self.nodes = nodes
+        return self
+```
 
-## Retracing of inner JIT functions
+This worked well for small trees but the jit compilation time was too high to
+be practical even for moderate tree depths. This is because `for` loops are not
+factorized during the jit compilation process. As a result, in the above
+snippet, the XLA computation graph will grow exponentially with the depth of
+the tree. For instance, the computational heavy `split_node` function will be
+traced 2**n times.
 
-Inner functions are retraced when called several times as if the whole code was
-inlined. To avoid it we could primitives such as `lax.fori_loop` or `lax.scan`.
+Using the `lax.scan` primitive can help us circumvent the problem. It allows to
+run a function over an iterable, passing along a carry over value, and get the
+stacked results. The function is only traced once. We can use `lax.scan`
+on the inner loop by passing the `masks` array and getting masks for the next
+depth and nodes for the current level. The updated code looks like this and,
+jitting compilation time was dractically reduced (from ~2m to ~5s on a 4 depth
+tree).
 
-If we only use shallow trees that we reuse multiple times like in boosted trees
-or random forest then the strategy of tracing the whole iteration is not so
-terrible.
+```python
+@register_pytree_node_class
+class DecisionTree:
+    ...
 
-However for tree with a depth greater than 4 the jitting time explodes
-exponentially making the use of this strategy impractical.
+    @jit
+    def fit(self, X: jnp.ndarray, y: jnp.ndarray) -> DecisionTree:
+        nodes = defaultdict()
+        n_samples = X.shape[0]
 
-# Reducing the number of tracing
+        def split_nodes(_carry, mask):
+            left_mask, right_mask, node = split_node(mask)
+            child_mask = jnp.stack([left_mask, right_mask], axis=0)
+            return _carry, (child_mask, node)
 
-To avoid retracing the functions in every loop iteration we need to use the
-`jax.lax.scan` primitive that allows us to execute several times a function
-traced a single time.
+        masks = [jnp.ones((n_samples,))]
+        for depth in range(self.max_depth):
+            _, (child_masks, nodes) = lax.scan(
+                fn=split_nodes,
+                init=None,  # carry is not used
+                xs=masks
+            )
+            nodes[depth] = nodes
+            masks = jnp.reshape(child_masks, (-1, n_samples))
 
-The loop takes a sequence as input and ouput a sequence of values. We could use
-`jax.vmap` instead also to avoid calling `scan` and ignoring the carry over.
-
-At each depth, we iterate over the nodes of the level and we produce the nodes
-of the next level. We could implement the inner loop using `scan`. The number of
-tracing would decrease exponentially from `2**n` to `n` where `n` is the tree
-depth.
-
-Implementing the tracing at each level using scan works but produces naturally
-vectorized tree nodes. To account for this new structure we use `vmap` in the
-predict step to vectorize the computation of the output.
+        self.nodes = nodes
+        return self
+```

@@ -1,4 +1,4 @@
-# Decision Trees in JAX
+# Decision Trees, Random Forests and Gradient Boosted Trees in JAX
 
 ## Installation guide
 Run `pip install jax_trees[cpu]` to run on CPU or `pip install jax_trees[cuda]`
@@ -37,7 +37,7 @@ models.
 
 ## Implementing decision trees
 
-### Split the nodes
+### Split the nodes using `vmap`
 
 Fitting a decision tree requires recursively splitting the data at each node
 into two subgroups until the specified `max_depth` is reached. In a typical
@@ -46,16 +46,58 @@ would split the node in 2 and instantiate child nodes with the resulting
 subgroups. In particular, the subgroup sizes would be particular to each model
 and each dataset.
 
-I implemented a `split` function that can compute the information gain by
-spliting a dataset based on a value and a column number. To select the best
-split in a node, I generate many candidates for each feature column and use the
-JAX function `vmap` two times to compute the scores, one time to parallelize
-over the candidates in a column and a second time to parallelize over the
-columns. We can then easily parallelize the split computations to get a matrix
-of information gains for many split candidates and then select the best
-splitting point for a node. So far so good.
+To select the best split for a node, many candidates are generated for each
+feature column so that we have a matrix of shape `(n_candidates, n_columns)` of
+potential splits candidates to consider. For each split, the resulting score of
+a split is computed (entropy or gini impurity for classification, variance for
+regression). Computing the `split` score for a single split can be done as
+follow, where `score_fn` is e.g. `entropy` for classifiers and `variance` for
+regressors.
 
-### Static number of splits
+```python
+def compute_split_score(
+    feature_column: jnp.ndarray,
+    y: jnp.ndarray,
+    mask: jnp.ndarray,
+    split_value: float,
+) -> float:
+    """Compute the scores of data splits."""
+    left_mask, right_mask = split_mask(split_value, feature_column, mask)
+    left_score = score_fn(y, left_mask)
+    right_score = score_fn(y, right_mask)
+
+    n_left = jnp.sum(left_mask)
+    n_right = jnp.sum(right_mask)
+
+    avg_score = (n_left * left_score + n_right * right_score) / (
+        n_left + n_right
+    )
+
+    return avg_score
+```
+
+Applying the JAX function `vmap` two times, one time to parallelize over the
+candidates in a column and a second time to parallelize over the columns, we
+can then easily parallelize the split computations to get a matrix of
+information gains for many split candidates and then select the best splitting
+point for a node. So far so good.
+
+```python
+# paralelize across split point in a column
+column_split_scores = vmap(
+    compute_split_score, in_axes=[None, None, None, 0]
+)
+
+# paralellize across columns
+all_split_scores = vmap(
+    column_split_scores, in_axes=[1, None, None, 1], out_axes=1
+)
+
+all_scores = all_split_scores(X, y, mask, split_candidate_matrix)
+```
+
+
+### Static number of splits because of `jit`
 
 A first issue arises however as some nodes cannot be split even though we have
 not reached `max_depth`. Indeed, the node may have too few data points to be
@@ -88,13 +130,15 @@ left_mask *= 1 - is_leaf
 right_mask *= 1 - is_leaf
 ```
 
-### Representing the tree
+### Representing the tree as a `pytree` object
 
-The decision tree itself is a collection of `TreeNode` objects. I chose to
-represent the tree as a nested structure where a node can be accessed doing
-`Tree.nodes[depth][rank]` where the rank is the position of the node at a given
-depth. This simple structure allows to access a node children you just do
-`nodes[depth+1][2*rank]` and `nodes[depth+1][2*rank+1`.
+The decision tree itself is a collection of `TreeNode` objects. A `TreeNode` is
+simply a container holding information on how to split the data (`is_leaf`,
+`split_column`, `split_value`,...). I chose to represent the tree as a nested
+structure where a node can be accessed doing `Tree.nodes[depth][rank]` where
+the rank is the position of the node at a given depth. This simple structure
+allows to access a node children you just do `nodes[depth+1][2*rank]` and
+`nodes[depth+1][2*rank+1]`.
 
 Now to be able to jit the method itself, the `DecisionTree` object should be a
 pytree object so that `self`, which is passed as the first argument to the
@@ -108,7 +152,7 @@ no side effect. This means that we cannot update the model parameters inplace
 using fit. Instead, we return the fitted model as output of the fit method
 `fitted_model = model.fit(...)`.
 
-### JIT compilation performance
+### Optimize JIT compilation performance using `lax.scan`
 
 The first implementation of the jitted fit function looked like this:
 
@@ -128,7 +172,7 @@ class DecisionTree:
             next_masks = []
 
             for rank in range(2**depth):
-                current_mask = nodes[depth][rank]
+                current_mask = masks[depth][rank]
                 left_mask, right_mask, current_node = split_node(current_mask)
                 nodes[depth].append(current_node)
                 next_masks.extend([left_mask, right_mask])
